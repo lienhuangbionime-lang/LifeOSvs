@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SakuraNote - 精緻日語學習筆記</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700;900&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Noto Sans TC"', 'sans-serif'],
+                        serif: ['"Noto Serif JP"', 'serif'],
+                    },
+                    animation: {
+                        'fall': 'fall linear infinite',
+                        'spin-slow': 'spin 3s linear infinite',
+                        'bounce-slow': 'bounce 2s infinite',
+                        'shimmer': 'shimmer 3s infinite linear',
+                        'shake': 'shake 0.5s cubic-bezier(.36,.07,.19,.97) both',
+                    },
+                    keyframes: {
+                        fall: {
+                            '0%': { transform: 'translateY(-50px) rotate(0deg)' },
+                            '100%': { transform: 'translateY(110vh) rotate(calc(360deg * var(--rotation-dir)))' },
+                        },
+                        shimmer: {
+                            '0%': { transform: 'translateX(-100%) skewX(-12deg)' },
+                            '100%': { transform: 'translateX(50%) skewX(-12deg)' },
+                        },
+                        shake: {
+                            '0%, 100%': { transform: 'translateX(0)' },
+                            '10%, 30%, 50%, 70%, 90%': { transform: 'translateX(-5px)' },
+                            '20%, 40%, 60%, 80%': { transform: 'translateX(5px)' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom Utilities */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        .preserve-3d { transform-style: preserve-3d; }
+        .backface-hidden { backface-visibility: hidden; }
+        .rotate-y-180 { transform: rotateY(180deg); }
+        
+        /* Grain Overlay */
+        .grain-overlay {
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        }
+    </style>
+</head>
+<body class="min-h-screen text-slate-700 font-sans pb-32 relative overflow-x-hidden transition-all duration-1000 bg-gradient-to-br from-[#fdfbf7] via-[#fcebf3] to-[#e8eaf6]">
+
+    <!-- Grain Overlay -->
+    <div class="fixed inset-0 pointer-events-none z-[1] opacity-[0.04] mix-blend-overlay grain-overlay"></div>
+
+    <!-- Falling Petals Container -->
+    <div id="petals-container" class="fixed inset-0 pointer-events-none overflow-hidden z-0 select-none"></div>
+
+    <!-- Header -->
+    <header class="fixed top-0 left-0 right-0 bg-white/20 backdrop-blur-xl border-b border-white/20 z-50 shadow-sm h-16 transition-all">
+        <div class="max-w-4xl mx-auto px-4 h-full flex items-center justify-between">
+            <div class="flex items-center gap-2 cursor-pointer group flex-shrink-0" onclick="app.closeAllModals(true)">
+                <div class="bg-gradient-to-tr from-pink-500 to-rose-400 p-2.5 rounded-xl shadow-lg shadow-pink-200/50 text-white transform group-hover:rotate-12 transition-transform duration-500 border border-white/20">
+                    <i data-lucide="flower" width="24" height="24"></i>
+                </div>
+                <h1 class="text-xl md:text-2xl font-black tracking-tight drop-shadow-sm text-slate-800/90" id="app-title">
+                    Sakura<span class="text-pink-500">Note</span>
+                </h1>
+            </div>
+            
+            <div class="flex-1 flex justify-end gap-2 overflow-x-auto no-scrollbar ml-4 pb-1">
+                <button onclick="app.openModal('profile')" class="p-3 rounded-2xl bg-white/30 hover:bg-white/50 transition-all border border-white/20 hover:border-pink-200 backdrop-blur-md relative group flex-shrink-0 shadow-sm">
+                    <i data-lucide="user" class="text-slate-700"></i>
+                    <span id="profile-dot" class="absolute top-2 right-2 w-2 h-2 bg-pink-500 rounded-full animate-ping hidden"></span>
+                </button>
+
+                <button onclick="app.openModal('gallery')" class="p-3 rounded-2xl bg-white/30 hover:bg-white/50 transition-all border border-white/20 hover:border-pink-200 backdrop-blur-md relative group flex-shrink-0 shadow-sm">
+                    <i data-lucide="image" class="text-slate-700"></i>
+                </button>
+
+                <button onclick="app.openModal('skin')" class="p-3 rounded-2xl bg-white/30 hover:bg-white/50 transition-all border border-white/20 hover:border-pink-200 flex items-center gap-2 backdrop-blur-md group relative flex-shrink-0 shadow-sm">
+                    <i data-lucide="palette" class="text-slate-700"></i>
+                    <span id="skin-count" class="hidden sm:inline text-sm font-bold text-slate-700">1</span>
+                </button>
+
+                <button id="flashcard-btn" onclick="app.checkKanjiGame()" class="p-3 rounded-2xl transition-all border border-white/20 flex items-center gap-2 backdrop-blur-md group relative flex-shrink-0 shadow-sm bg-white/10 opacity-60 cursor-not-allowed">
+                    <i data-lucide="lock-keyhole" class="text-slate-500" id="flashcard-icon"></i>
+                    <span id="flashcard-text" class="text-xs font-bold text-slate-500">0/10</span>
+                </button>
+
+                <button onclick="app.openModal('history')" class="p-3 rounded-2xl transition-all duration-300 flex items-center gap-2 font-medium text-sm backdrop-blur-md flex-shrink-0 shadow-sm bg-white/30 hover:bg-white/50">
+                    <i data-lucide="history" class="text-slate-700"></i>
+                </button>
+                
+                <button onclick="app.toggleMute()" class="p-3 rounded-2xl bg-white/30 hover:bg-white/50 transition-all border border-white/20 hover:border-pink-200 backdrop-blur-md flex-shrink-0 shadow-sm">
+                    <i data-lucide="volume-2" class="text-slate-400" id="mute-icon"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="relative z-10 pt-32 max-w-4xl mx-auto px-4 space-y-8 min-h-[calc(100vh-8rem)]">
+        
+        <!-- Search Area -->
+        <div id="search-container" class="transition-all duration-1000 ease-out translate-y-[10vh] opacity-100">
+            <div class="text-center mb-10 space-y-4">
+                <!-- Greeting & Stats -->
+                <div id="greeting-area" class="animate-in fade-in slide-in-from-bottom-4 duration-700">
+                    <div id="stats-badge" class="inline-block mb-4 px-4 py-1.5 rounded-full bg-white/30 backdrop-blur-md border border-white/40 text-xs font-bold text-slate-600 shadow-sm uppercase tracking-wider">
+                        Today: 0 / 3 | Week: 0 / 7
+                    </div>
+                    
+                    <!-- Daily Reward Button (Dynamic) -->
+                    <div id="daily-reward-btn-container" class="hidden mb-6 animate-in slide-in-from-top-4 duration-700 delay-200">
+                        <button onclick="app.openModal('daily_reward_picker')" class="group relative inline-flex items-center gap-2 bg-gradient-to-r from-amber-200 to-yellow-400 text-white font-black px-8 py-3 rounded-full shadow-xl shadow-yellow-200/50 hover:scale-105 active:scale-95 transition-all">
+                            <div class="absolute inset-0 bg-white/20 rounded-full animate-pulse group-hover:animate-none"></div>
+                            <i data-lucide="sparkles" class="text-white drop-shadow-sm"></i>
+                            <span class="tracking-wide drop-shadow-sm text-lg">今日運勢三選一</span>
+                        </button>
+                    </div>
+                    <div id="daily-reward-lock-msg" class="hidden mb-6 text-sm text-slate-500/80 font-bold bg-white/20 px-4 py-1.5 rounded-full inline-flex items-center gap-2 backdrop-blur-sm border border-white/20">
+                        <i data-lucide="lock" width="14"></i>
+                        完成 3 次查詢後解鎖今日運勢
+                    </div>
+
+                    <h2 id="main-greeting" class="text-4xl md:text-6xl font-black tracking-tight mb-4 drop-shadow-sm text-slate-800">
+                        日本語、勉強しましょう
+                    </h2>
+                    <p id="sub-greeting" class="text-xl font-medium font-serif italic text-slate-500">
+                        輸入中文或日文，探索語言的奧秘
+                    </p>
+                </div>
+
+                <!-- Loading State -->
+                <div id="loading-area" class="hidden animate-in fade-in duration-500">
+                    <h3 class="text-3xl font-bold mb-4 flex items-center justify-center gap-3 text-slate-700">
+                        <div class="p-3 bg-white/30 rounded-full animate-spin">
+                            <i data-lucide="feather" class="text-pink-400"></i>
+                        </div>
+                        AI 思考中...
+                    </h3>
+                    <p id="loading-msg" class="text-slate-600 text-lg font-medium bg-white/60 backdrop-blur-md inline-block px-6 py-4 rounded-2xl border border-white/50 shadow-xl font-serif">
+                        
+                    </p>
+                </div>
+            </div>
+
+            <!-- Search Bar -->
+            <div class="relative group max-w-2xl mx-auto z-20">
+                <div class="absolute -inset-1 bg-gradient-to-r from-pink-300 via-purple-300 to-indigo-300 rounded-full blur opacity-30 group-hover:opacity-60 transition duration-700 animate-pulse"></div>
+                <div class="relative bg-white/40 rounded-full shadow-2xl shadow-indigo-100/40 p-2 pl-8 flex items-center gap-3 border border-white/60 backdrop-blur-2xl">
+                    <input type="text" id="search-input" class="flex-1 bg-transparent border-none outline-none text-xl py-4 text-slate-800 placeholder:text-slate-400/80 font-medium" placeholder="例如: 夢 / 桜 / 愛している" onkeydown="if(event.key === 'Enter') app.analyzeText()">
+                    <button onclick="app.analyzeText()" id="search-btn" class="bg-slate-800 hover:bg-slate-900 disabled:bg-slate-300 text-white w-14 h-14 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg active:scale-95 flex-shrink-0 group/btn">
+                        <i data-lucide="search" class="group-hover/btn:scale-110 transition-transform"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Error Message -->
+        <div id="error-msg" class="hidden max-w-2xl mx-auto bg-white/80 backdrop-blur border border-red-100 text-red-600 text-lg font-bold px-8 py-6 rounded-2xl text-center shadow-lg animate-pulse"></div>
+
+        <!-- Results Area -->
+        <div id="result-container" class="hidden max-w-5xl mx-auto space-y-8 pb-12 animate-in fade-in slide-in-from-bottom-8 duration-700">
+            <!-- Dynamic Content will be injected here -->
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="fixed bottom-0 left-0 right-0 bg-white/10 backdrop-blur-sm border-t border-white/10 p-4 z-10 pointer-events-none">
+        <div class="max-w-4xl mx-auto flex justify-center items-center text-xs font-bold gap-1 text-slate-400/60">
+           <span>SakuraNote</span><i data-lucide="heart" width="10" class="text-pink-400 fill-pink-400"></i><span>2025</span>
+        </div>
+    </footer>
+
+    <!-- Modals Overlay Container -->
+    <div id="modal-overlay" class="fixed inset-0 z-[60] hidden bg-slate-900/40 backdrop-blur-md transition-opacity"></div>
+    <div id="modal-container" class="fixed inset-0 z-[70] hidden pointer-events-none flex items-center justify-center p-4">
+        <!-- Modals will be injected here -->
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, deleteDoc, doc, serverTimestamp, orderBy, setDoc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        // --- Global Constants (Fixed Scope Issue) ---
+        window.LOADING_MSGS = [
+            "正在把你的中文變成壽司...🍣", "AI 老師正在喝抹茶提神...🍵", "正在召喚日文精靈...✨",
+            "日文裡的「手紙 (てがみ)」是信，不是衛生紙喔...💌",
+            "「大丈夫 (だいじょうぶ)」是沒問題的意思，不是男子漢...👌",
+            "「切手 (きって)」是郵票，不要拿刀去切手...✂️",
+            "「泥棒 (どろぼう)」是小偷！👮‍♂️", "「娘 (むすめ)」是女兒...👧",
+            "「勉強 (べんきょう)」是學習，日本人學習很勉強？📚",
+            "「怪我 (けが)」是受傷，不是怪罪我...🤕",
+            "「真面目 (まじめ)」是很認真的意思...🤨",
+            "「愛人 (あいじん)」在日文通常指情婦，小心使用...💔",
+            "「新聞 (しんぶん)」是報紙...📰", "正在幫漢字穿上平假名衣服...👘",
+            "「床 (ゆか)」是地板，睡覺的床是「ベッド」...🛌",
+            "「人参 (にんじん)」是紅蘿蔔，不是高麗人蔘...🥕",
+            "「魔法瓶 (まほうびん)」是保溫瓶...🧙‍♂️",
+            "日文的貓叫聲是「にゃー (Nya-)」...🐱",
+            "日文的狗叫聲是「わんわん (WanWan)」...🐶",
+            "「猫舌 (ねこじた)」是指怕燙的人...🥵",
+            "正在跟哆啦A夢借翻譯蒟蒻...",
+            "思考中...這句日文有點難...", "正在翻閱腦中的日漢大辭典...",
+            "「大家 (おおや)」是房東的意思...🏠",
+            "「経理 (けいり)」是會計，不是經理...💼",
+            "「留守 (るす)」是「不在家」，不是留下來看守...🚪",
+            "「夢中 (むちゅう)」是著迷、熱衷的意思...😍",
+            "「邪魔 (じゃま)」是打擾了...🙇‍♂️",
+            "AI 的 CPU 正在高速運轉中...⚙️",
+            "正在尋找最適合你的例句...",
+            "「辛い」可以是「辣 (からい)」也可以是「辛苦 (つらい)」...🌶️",
+            "日文的紅綠燈叫「青信号 (藍燈)」，但明明是綠色...🟢",
+            "你知道嗎？日本便利商店比寺廟還多...",
+            "正在把翻譯結果包裝成禮物...🎁",
+            "等我一下，我去泡杯咖啡...☕",
+            "「喧嘩 (けんか)」是吵架的意思...💢",
+            "「是非 (ぜひ)」是「務必」的意思...🙏",
+            "加載知識庫中 [■■■■■■□□□□] 60%",
+            "為了你，我會努力翻譯的！(熱血漫畫風)",
+            "「石頭布」在日文是「じゃんけんぽん」...✊✌️🖐️",
+            "正在計算最自然的語氣...",
+            "「嘘 (うそ)」是說謊的意思...🤥",
+            "「苦手 (にがて)」是不擅長、應付不來...😣",
+            "不要著急，慢工出細活...",
+            "「一期一會」是指珍惜當下的相遇...🍵",
+            "日文有三種文字：平假名、片假名、漢字，好難啊...",
+            "正在為你量身打造日文解析...",
+            "準備好了嗎？答案即將揭曉...",
+            "今天的幸運色是粉紅色喔...🌸"
+        ];
+
+        window.DEFAULT_THEMES = [
+            { id: 'default', name: '櫻花初雪', style: 'bg-gradient-to-br from-[#fdfbf7] via-[#fcebf3] to-[#e8eaf6]', isDark: false },
+            { id: 'ocean', name: '深海琉璃', style: 'bg-gradient-to-br from-[#f0f9ff] via-[#cffafe] to-[#dbeafe]', isDark: false },
+            { id: 'forest', name: '古神木', style: 'bg-gradient-to-br from-[#f0fdf4] via-[#dcfce7] to-[#ccfbf1]', isDark: false },
+            { id: 'sunset', name: '黃昏金箔', style: 'bg-gradient-to-br from-[#fff7ed] via-[#ffedd5] to-[#fce7f3]', isDark: false },
+            { id: 'night', name: '月夜星河', style: 'bg-gradient-to-br from-[#0f172a] via-[#1e1b4b] to-[#312e81]', isDark: true },
+        ];
+
+        window.PROFILE_REWARD_THEME = {
+            id: 'profile_reward_dawn',
+            name: '黎明・初見',
+            style: '', 
+            styleObject: {
+                background: 'linear-gradient(120deg, #e0c3fc 0%, #8ec5fc 100%)',
+                backgroundAttachment: 'fixed',
+                color: '#334155'
+            },
+            isDark: false,
+            isCustom: false
+        };
+
+        // --- Helper Functions attached to Window or Helper Scope ---
+        window.appHelpers = {
+            getExpandedPetalStyle: function(id, customPetals = []) {
+                if (id >= 1000) {
+                    const custom = customPetals.find(p => p.id === id);
+                    if (custom) return custom;
+                    return { id, char: '✨', color: '#ffd700', name: '自定義' }; 
+                }
+
+                const emojis = [
+                    '🌸', '💮', '🌺', '🌻', '🌼', '🌷', '🌹', '🥀', '💐', '🌾', '🌿', '🍀', '🍁', '🍂', '🍃', '🍄', '🌰', '🌵', '🌴', '🌲', '🌳', '🪴', '🎋', '🎍', '🌱', '🪴', '🍇', '🍈', '🍉', '🍊',
+                    '✨', '⭐', '🌙', '☀️', '🌤️', '☁️', '⛈️', '❄️', '☃️', '⚡', '🔥', '💧', '🌊', '🌈', '🌌', '🪐', '🌍', '☄️', '🌂', '☂️',
+                    '🍓', '🍑', '🍋', '🍒', '🍎', '🍍', '🍌', '🍙', '🍘', '🍡', '🍢', '🍣', '🍤', '🍥', '🍦', '🍧', '🍨', '🍩', '🍪', '🎂', '🍰', '🧁', '🍫', '🍬', '🍭', '🍮', '🍯', '🍵', '🍶', '🍷',
+                    '🐱', '🐈', '🐰', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐙', '🦋', '🐝', '🐞', '🐟', '🐬', '🐳', '🦄', '🐲', '🕊️', '🦉', '🐤', '🐧',
+                    '❤️', '🧡', '💛', '💚', '💙', '💜', '🤎', '🖤', '🤍', '💖', '💗', '💓', '💞', '💕', '💟', '❣️', '🎵', '🎶', '🔔', '🎁', '🎈', '💎', '👑', '💍', '👾', '🤖', '👽', '👻'
+                ];
+                const colors = ['#ffb7b2', '#ff9cee', '#d4a5a5', '#e2f0cb', '#c7ceea', '#ffdac1', '#b5ead7', '#ff9aa2', '#e0f7fa', '#fff9c4', '#f8bbd0', '#d1c4e9', '#c5cae9', '#b2dfdb', '#f0f4c3', '#ffe0b2'];
+                const emojiIndex = (id * 7 + 3) % emojis.length;
+                const colorIndex = (id * 13 + 5) % colors.length;
+                return { id, char: emojis[emojiIndex], color: colors[colorIndex], name: `No.${id.toString().padStart(3, '0')} 收藏` };
+            },
+
+            stringToPastelColor: function(str, shift = 0) {
+                let hash = 0;
+                for (let i = 0; i < str.length; i++) {
+                    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+                }
+                const h = Math.abs((hash + shift) % 360);
+                const s = 60 + (hash % 20); 
+                const l = 80 + (hash % 10); 
+                return `hsl(${h}, ${s}%, ${l}%)`;
+            },
+
+            generateThemeFromInterest: function(interest) {
+                if (!interest || interest.trim() === '') return window.DEFAULT_THEMES[0];
+                const color1 = this.stringToPastelColor(interest, 0);
+                const color2 = this.stringToPastelColor(interest, 90);
+                const color3 = this.stringToPastelColor(interest, 180);
+                return {
+                    id: `custom_${Date.now()}`,
+                    name: `專屬: ${interest}`,
+                    styleObject: {
+                        background: `linear-gradient(135deg, ${color1} 0%, ${color2} 50%, ${color3} 100%)`,
+                        backgroundAttachment: 'fixed', 
+                        color: '#334155'
+                    },
+                    isDark: false,
+                    isCustom: true
+                };
+            }
+        };
+
+        // Global App Object
+        window.app = {
+            state: {
+                user: null,
+                userProfile: { nickname: '', birthday: '', interests: '' },
+                history: [],
+                activeTheme: window.DEFAULT_THEMES[0],
+                myThemes: [...window.DEFAULT_THEMES],
+                unlockedPetals: [1],
+                customPetals: [],
+                activePetalId: 1,
+                dailyCount: 0,
+                weeklyStudyDays: 0,
+                lastRewardDate: '',
+                isMuted: false,
+                kanjiQuizDeck: [],
+                currentQuizIndex: 0,
+                quizStatus: 'idle',
+                petalOptions: [],
+                rewardReveal: { isRevealed: false, selectedId: null }
+            },
+            
+            // --- Initialization ---
+            init: async function() {
+                const firebaseConfig = JSON.parse(__firebase_config);
+                const app = initializeApp(firebaseConfig);
+                this.auth = getAuth(app);
+                this.db = getFirestore(app);
+                this.appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                this.apiKey = ""; // Provided by env
+
+                // Auth
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(this.auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(this.auth);
+                }
+
+                onAuthStateChanged(this.auth, async (u) => {
+                    this.state.user = u;
+                    if (u) this.loadUserData(u);
+                });
+
+                // Setup Icons
+                lucide.createIcons();
+                this.startPetals();
+            },
+
+            // --- Data Loading ---
+            loadUserData: async function(u) {
+                // 1. Profile
+                const profileSnap = await getDoc(doc(this.db, 'artifacts', this.appId, 'users', u.uid, 'profile', 'info'));
+                if (profileSnap.exists()) {
+                    this.state.userProfile = profileSnap.data();
+                    this.updateHeaderGreeting();
+                } else {
+                    setTimeout(() => this.openModal('profile'), 1500);
+                }
+
+                // 2. Gamification
+                const gameRef = doc(this.db, 'artifacts', this.appId, 'users', u.uid, 'profile', 'gamification');
+                const gameSnap = await getDoc(gameRef);
+                const todayStr = new Date().toDateString();
+
+                if (gameSnap.exists()) {
+                    const data = gameSnap.data();
+                    if (data.lastLoginDate !== todayStr) {
+                        // Reset Daily
+                        let newWeek = data.weeklyStudyDays || 0;
+                        const lastDate = new Date(data.lastLoginDate);
+                        const diffDays = Math.ceil(Math.abs(new Date() - lastDate) / (1000 * 60 * 60 * 24));
+                        if (diffDays === 1) newWeek++; else newWeek = 1;
+                        
+                        updateDoc(gameRef, { lastLoginDate: todayStr, dailyCount: 0, weeklyStudyDays: newWeek });
+                        this.state.dailyCount = 0;
+                        this.state.weeklyStudyDays = newWeek;
+                    } else {
+                        this.state.dailyCount = data.dailyCount || 0;
+                        this.state.weeklyStudyDays = data.weeklyStudyDays || 1;
+                    }
+                    if (data.unlockedPetals) this.state.unlockedPetals = data.unlockedPetals;
+                    if (data.customPetals) this.state.customPetals = data.customPetals;
+                    if (data.activePetalId) this.state.activePetalId = data.activePetalId;
+                    if (data.activeThemeObject) this.applyTheme(data.activeThemeObject);
+                    this.state.lastRewardDate = data.lastRewardDate || '';
+                } else {
+                    setDoc(gameRef, { 
+                        dailyCount: 0, totalQueries: 0, lastLoginDate: todayStr, 
+                        unlockedPetals: [1], customPetals: [], activePetalId: 1, 
+                        weeklyStudyDays: 1, isMuted: false, lastRewardDate: '' 
+                    });
+                    this.state.dailyCount = 0;
+                    this.state.weeklyStudyDays = 1;
+                }
+                
+                this.updateHeaderStats();
+                this.startPetals(); // Re-render petals with correct ID
+
+                // 3. History Listener
+                const historyQ = query(collection(this.db, 'artifacts', this.appId, 'users', u.uid, 'japanese_history'), orderBy('timestamp', 'desc'));
+                onSnapshot(historyQ, (snap) => {
+                    this.state.history = snap.docs.map(d => ({id: d.id, ...d.data()}));
+                    this.updateFlashcardButton();
+                });
+
+                // 4. Gifts Listener (Themes)
+                const giftsQ = query(collection(this.db, 'artifacts', this.appId, 'users', u.uid, 'gifts'), orderBy('timestamp', 'desc'));
+                onSnapshot(giftsQ, (snap) => {
+                    const gifted = snap.docs.map(d => d.data().themeObject).filter(Boolean);
+                    // Standard + Gifted, uniq by ID
+                    const all = [...window.DEFAULT_THEMES, ...gifted];
+                    this.state.myThemes = Array.from(new Map(all.map(i => [i.id, i])).values());
+                });
+            },
+
+            // --- UI Updaters ---
+            updateHeaderStats: function() {
+                const badge = document.getElementById('stats-badge');
+                badge.innerText = `Today: ${this.state.dailyCount} / 3 | Week: ${this.state.weeklyStudyDays} / 7`;
+                
+                // Check Reward Lock
+                const todayStr = new Date().toDateString();
+                const canClaim = this.state.lastRewardDate !== todayStr;
+                const btnContainer = document.getElementById('daily-reward-btn-container');
+                const lockMsg = document.getElementById('daily-reward-lock-msg');
+
+                if (canClaim) {
+                    if (this.state.dailyCount >= 3) {
+                        btnContainer.classList.remove('hidden');
+                        lockMsg.classList.add('hidden');
+                    } else {
+                        btnContainer.classList.add('hidden');
+                        lockMsg.classList.remove('hidden');
+                        lockMsg.innerHTML = `<i data-lucide="lock" width="14"></i> 完成 3 次查詢後解鎖今日運勢 (${this.state.dailyCount}/3)`;
+                        lucide.createIcons();
+                    }
+                } else {
+                    btnContainer.classList.add('hidden');
+                    lockMsg.classList.add('hidden');
+                }
+            },
+
+            updateHeaderGreeting: function() {
+                if (this.state.userProfile.nickname) {
+                    document.getElementById('main-greeting').innerText = `こんにちは、${this.state.userProfile.nickname}！`;
+                    document.getElementById('profile-dot').classList.add('hidden');
+                }
+                if (this.state.userProfile.interests) {
+                    document.getElementById('sub-greeting').innerText = `今天來學學關於「${this.state.userProfile.interests}」的日文吧`;
+                }
+            },
+
+            updateFlashcardButton: function() {
+                const uniqueKanji = this.getUniqueKanji();
+                const count = uniqueKanji.length;
+                const btn = document.getElementById('flashcard-btn');
+                const icon = document.getElementById('flashcard-icon');
+                const text = document.getElementById('flashcard-text');
+
+                text.innerText = `${count}/10`;
+                if (count >= 10) {
+                    btn.classList.remove('bg-white/10', 'opacity-60', 'cursor-not-allowed');
+                    btn.classList.add('bg-white/30', 'hover:bg-white/50', 'hover:border-pink-200', 'cursor-pointer');
+                    icon.setAttribute('data-lucide', 'brain-circuit');
+                    icon.classList.remove('text-slate-500');
+                    icon.classList.add('text-pink-600');
+                    btn.title = "漢字讀音特訓";
+                } else {
+                    icon.setAttribute('data-lucide', 'lock-keyhole');
+                    btn.title = `收集 10 張漢字解析卡解鎖 (${count}/10)`;
+                }
+                lucide.createIcons();
+            },
+
+            getUniqueKanji: function() {
+                const allKanji = this.state.history.flatMap(h => h.main_kanji || []);
+                const unique = [];
+                const seen = new Set();
+                for (const k of allKanji) {
+                    if (!seen.has(k.char)) {
+                        seen.add(k.char);
+                        unique.push(k);
+                    }
+                }
+                return unique;
+            },
+
+            // --- Theme & Visuals ---
+            applyTheme: function(theme) {
+                this.state.activeTheme = theme;
+                document.body.className = `min-h-screen text-slate-700 font-sans pb-32 relative overflow-x-hidden transition-all duration-1000 ${theme.isCustom ? '' : theme.style}`;
+                if (theme.isCustom) Object.assign(document.body.style, theme.styleObject);
+                else document.body.style = '';
+                
+                // Re-render petals to match theme if needed (though petals handle their own color)
+            },
+
+            startPetals: function() {
+                const container = document.getElementById('petals-container');
+                container.innerHTML = ''; // Clear
+                
+                const style = window.appHelpers.getExpandedPetalStyle(this.state.activePetalId, this.state.customPetals);
+                const count = 12;
+
+                for (let i = 0; i < count; i++) {
+                    this.createPetal(container, style);
+                }
+                
+                // Continuous generation
+                if (this.petalInterval) clearInterval(this.petalInterval);
+                this.petalInterval = setInterval(() => {
+                    if (Math.random() > 0.98) this.createPetal(container, style);
+                }, 1000);
+            },
+
+            createPetal: function(container, style) {
+                const el = document.createElement('div');
+                el.innerText = style.char;
+                el.className = 'absolute top-[-50px] animate-fall blur-[0.5px]';
+                el.style.left = Math.random() * 100 + '%';
+                el.style.fontSize = (10 + Math.random() * 20) + 'px';
+                el.style.animationDuration = (8 + Math.random() * 10) + 's';
+                el.style.animationDelay = (Math.random() * 5) + 's';
+                el.style.opacity = 0.1 + Math.random() * 0.5;
+                el.style.textShadow = `0 0 10px ${style.color}`;
+                el.style.color = style.color;
+                el.style.setProperty('--rotation-dir', Math.random() > 0.5 ? 1 : -1);
+                
+                // Remove after animation to prevent DOM bloat
+                el.addEventListener('animationend', () => el.remove());
+                container.appendChild(el);
+            },
+
+            // --- Core Functionality ---
+            analyzeText: async function() {
+                const inputEl = document.getElementById('search-input');
+                const text = inputEl.value.trim();
+                if (!text) return;
+
+                // UI State
+                inputEl.value = '';
+                document.getElementById('search-container').classList.remove('translate-y-[10vh]');
+                document.getElementById('greeting-area').classList.add('hidden');
+                document.getElementById('loading-area').classList.remove('hidden');
+                document.getElementById('result-container').classList.add('hidden');
+                
+                const joke = window.LOADING_MSGS[Math.floor(Math.random() * window.LOADING_MSGS.length)];
+                document.getElementById('loading-msg').innerText = joke;
+                this.speak(joke);
+
+                // API Call
+                let userContext = "";
+                if (this.state.userProfile.nickname) userContext += `使用者暱稱: ${this.state.userProfile.nickname}。`;
+                if (this.state.userProfile.interests) userContext += `使用者興趣: ${this.state.userProfile.interests}。`;
+                const systemPrompt = `你是一位日語老師。${userContext} 解析輸入內容(中/日)。回傳JSON: { "original": "", "japanese": "日文", "kana": "假名", "romaji": "羅馬音", "chinese": "中文", "explanation": "簡短解說", "tags": [], "main_kanji": [{"char":"", "meaning":"", "onyomi":"", "kunyomi":""}], "examples": [{"sentence":"", "kana":"", "meaning":""}] }`;
+
+                try {
+                    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${this.apiKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: text }] }],
+                            systemInstruction: { parts: [{ text: systemPrompt }] },
+                            generationConfig: { responseMimeType: "application/json" }
+                        })
+                    });
+                    const data = await res.json();
+                    if (!data.candidates) throw new Error("No response");
+                    const parsed = JSON.parse(data.candidates[0].content.parts[0].text);
+                    
+                    this.renderResult(parsed);
+
+                    // Save DB
+                    if (this.state.user) {
+                        await addDoc(collection(this.db, 'artifacts', this.appId, 'users', this.state.user.uid, 'japanese_history'), { ...parsed, timestamp: serverTimestamp() });
+                        
+                        this.state.dailyCount++;
+                        updateDoc(doc(this.db, 'artifacts', this.appId, 'users', this.state.user.uid, 'profile', 'gamification'), { 
+                            dailyCount: this.state.dailyCount, 
+                            totalQueries: (this.state.totalQueries || 0) + 1 
+                        });
+                        this.updateHeaderStats();
+                    }
+
+                } catch (err) {
+                    console.error(err);
+                    document.getElementById('error-msg').innerText = "連線不穩定，請稍後再試";
+                    document.getElementById('error-msg').classList.remove('hidden');
+                } finally {
+                    document.getElementById('loading-area').classList.add('hidden');
+                }
+            },
+
+            renderResult: function(data) {
+                const container = document.getElementById('result-container');
+                container.classList.remove('hidden');
+                
+                // Construct HTML based on data
+                let tagsHtml = data.tags.map(tag => `<span class="text-sm font-bold bg-white/50 text-slate-600 px-4 py-1.5 rounded-full border border-white/50 backdrop-blur-sm shadow-sm">#${tag}</span>`).join('');
+                
+                let kanjiHtml = '';
+                if (data.main_kanji) {
+                    kanjiHtml = `<div class="flex flex-col gap-6 items-center">
+                       <span class="text-xs font-bold text-slate-400 uppercase tracking-widest bg-white/40 px-4 py-1.5 rounded-full backdrop-blur-sm border border-white/20">點擊發音</span>
+                       <div class="flex flex-wrap justify-center gap-4">
+                        ${data.main_kanji.map(k => `
+                          <button onclick="app.speak('${k.char}')" class="group/kanji relative w-28 h-28 bg-white/60 border border-white shadow-xl shadow-purple-100/30 rounded-3xl overflow-hidden hover:shadow-2xl hover:shadow-pink-100 hover:-translate-y-2 transition-all duration-500 cursor-pointer backdrop-blur-md">
+                            <span class="absolute inset-0 flex items-center justify-center text-6xl font-serif text-slate-800 z-10 font-bold group-hover/kanji:scale-110 transition-transform">${k.char}</span>
+                            <div class="absolute inset-0 bg-gradient-to-t from-pink-200/40 to-transparent opacity-0 group-hover/kanji:opacity-100 transition-opacity flex items-center justify-center z-20"><i data-lucide="volume-2" class="text-pink-600 drop-shadow-md mt-12"></i></div>
+                          </button>
+                        `).join('')}
+                       </div>
+                    </div>`;
+                }
+
+                let examplesHtml = data.examples.map(ex => `
+                    <div class="group bg-white/40 hover:bg-white/80 p-6 rounded-3xl transition-all duration-300 border border-transparent hover:border-indigo-100 cursor-pointer shadow-sm hover:shadow-md" onclick="app.speak('${ex.sentence}')">
+                        <div class="flex justify-between items-start gap-4">
+                          <div class="space-y-1">
+                            <p class="text-lg font-bold text-slate-800 leading-snug">${ex.sentence}</p>
+                            <p class="text-sm text-indigo-500 font-mono font-medium">${ex.kana}</p>
+                            <p class="text-base text-slate-600 font-medium mt-1">${ex.meaning}</p>
+                          </div>
+                          <button class="text-slate-400 hover:text-indigo-600 bg-white/50 p-2 rounded-full transition-all shadow-sm flex-shrink-0"><i data-lucide="play-circle"></i></button>
+                        </div>
+                    </div>
+                `).join('');
+
+                let kanjiDetailHtml = '';
+                if(data.main_kanji) {
+                    kanjiDetailHtml = data.main_kanji.map(char => `
+                      <div class="flex gap-4 p-5 bg-white/40 rounded-3xl border border-white/50 shadow-sm hover:border-pink-200 transition-colors group">
+                        <button onclick="app.speak('${char.char}')" class="flex-shrink-0 w-16 h-16 bg-pink-50/40 rounded-2xl flex items-center justify-center text-3xl font-serif font-bold text-pink-700 cursor-pointer hover:bg-pink-100 hover:scale-105 transition-all shadow-sm">${char.char}</button>
+                        <div class="flex-1 space-y-1">
+                          <p class="font-bold text-lg text-slate-800 flex items-center gap-2">${char.meaning}<i data-lucide="volume-2" class="text-pink-300 opacity-0 group-hover:opacity-100 transition-opacity w-4"></i></p>
+                          <div class="grid grid-cols-1 gap-2 text-sm text-slate-600 font-medium mt-2">
+                            <div class="flex items-center gap-2"><span class="text-pink-500 font-bold text-[10px] bg-pink-100 px-1.5 py-0.5 rounded border border-pink-200">音</span>${char.onyomi || "-"}</div>
+                            <div class="flex items-center gap-2"><span class="text-blue-500 font-bold text-[10px] bg-blue-100 px-1.5 py-0.5 rounded border border-blue-200">訓</span>${char.kunyomi || "-"}</div>
+                          </div>
+                        </div>
+                      </div>
+                    `).join('');
+                }
+
+                container.innerHTML = `
+                    <div class="bg-white/60 backdrop-blur-2xl rounded-[3rem] shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)] border border-white/60 overflow-hidden relative group">
+                      <div class="absolute top-0 w-full h-1 bg-gradient-to-r from-pink-400 via-purple-500 to-indigo-500 opacity-80"></div>
+                      <div class="p-8 md:p-12 relative z-10">
+                        <div class="flex justify-between items-start mb-6">
+                          <div class="flex flex-wrap gap-2">${tagsHtml}</div>
+                          <button onclick="app.copyToClipboard('${data.japanese}\\n${data.kana}')" class="bg-white/50 hover:bg-white text-slate-500 hover:text-pink-600 p-3 rounded-full transition border border-white shadow-sm">
+                            <i data-lucide="copy"></i>
+                          </button>
+                        </div>
+
+                        <div class="flex flex-col md:flex-row gap-12 items-center md:items-start">
+                          <div class="flex-1 text-center md:text-left space-y-6 w-full">
+                            <div class="space-y-3">
+                              <p class="text-2xl md:text-3xl text-pink-500 font-medium tracking-wide font-mono drop-shadow-sm">${data.kana}</p>
+                              <div class="flex items-center justify-center md:justify-start gap-4">
+                                <h2 class="text-6xl md:text-8xl font-black text-slate-800 tracking-tight cursor-pointer hover:text-pink-600 transition-colors duration-300 drop-shadow-sm leading-tight font-serif" onclick="app.speak('${data.japanese}')">
+                                  ${data.japanese}
+                                </h2>
+                                <button onclick="app.speak('${data.japanese}')" class="bg-white/80 hover:bg-white text-pink-500 p-4 rounded-full transition-all shadow-lg shadow-pink-100 active:scale-95 border border-white flex-shrink-0">
+                                  <i data-lucide="volume-2" width="28" height="28"></i>
+                                </button>
+                              </div>
+                              <p class="text-slate-400 font-mono text-lg tracking-widest uppercase pl-1">${data.romaji}</p>
+                            </div>
+                            
+                            <div class="bg-gradient-to-br from-white/60 to-pink-50/40 p-8 rounded-[2rem] border border-white/60 mt-6 relative overflow-hidden backdrop-blur-md shadow-sm group/box hover:shadow-md transition-shadow">
+                               <div class="absolute -top-4 -right-4 text-slate-900/5 transform rotate-12 transition-transform duration-700 group-hover/box:rotate-45"><i data-lucide="flower" width="140" height="140"></i></div>
+                               <h3 class="text-3xl font-bold text-slate-800 mb-3">${data.chinese}</h3>
+                               <p class="text-slate-600 leading-relaxed text-lg font-medium relative z-10">${data.explanation}</p>
+                            </div>
+                          </div>
+                          ${kanjiHtml}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="grid md:grid-cols-2 gap-6 md:gap-8">
+                      <div class="bg-white/40 backdrop-blur-md rounded-[2.5rem] p-8 shadow-lg border border-white/40 flex flex-col h-full hover:shadow-xl transition-shadow">
+                          <div class="flex items-center gap-3 mb-6 text-indigo-600">
+                            <div class="bg-indigo-100/50 p-2.5 rounded-2xl backdrop-blur-sm"><i data-lucide="star" fill="currentColor"></i></div>
+                            <h4 class="font-bold text-xl text-slate-800">生活例句</h4>
+                          </div>
+                          <div class="space-y-4 flex-1">${examplesHtml}</div>
+                      </div>
+                      ${kanjiDetailHtml ? `
+                      <div class="bg-white/40 backdrop-blur-md rounded-[2.5rem] p-8 shadow-lg border border-white/40 flex flex-col h-full hover:shadow-xl transition-shadow">
+                          <div class="flex items-center gap-3 mb-6 text-pink-600">
+                             <div class="bg-pink-100/50 p-2.5 rounded-2xl backdrop-blur-sm"><i data-lucide="layout-grid"></i></div>
+                            <h4 class="font-bold text-xl text-slate-800">漢字解析</h4>
+                          </div>
+                          <div class="space-y-4 flex-1">${kanjiDetailHtml}</div>
+                      </div>` : ''}
+                    </div>
+                `;
+                lucide.createIcons();
+            },
+
+            // --- Modals ---
+            openModal: function(name) {
+                const overlay = document.getElementById('modal-overlay');
+                const container = document.getElementById('modal-container');
+                const content = container; // We will inject innerHTML here
+                
+                // Common Overlay Setup
+                overlay.classList.remove('hidden');
+                container.classList.remove('hidden');
+                container.classList.remove('pointer-events-none');
+                
+                let html = '';
+
+                if (name === 'profile') {
+                    html = `
+                    <div class="relative bg-white/90 backdrop-blur-xl rounded-[2.5rem] p-8 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl border border-white/60 animate-in zoom-in-95 duration-200 custom-scrollbar">
+                        <button onclick="app.closeAllModals()" class="absolute top-4 right-4 p-2 text-slate-400 hover:bg-slate-100 rounded-full z-10"><i data-lucide="x"></i></button>
+                        <div class="text-center mb-6">
+                           <div class="inline-flex bg-pink-100 p-4 rounded-full mb-3 text-pink-500 shadow-inner"><i data-lucide="user" width="40" height="40"></i></div>
+                           <h3 class="text-2xl font-black text-slate-800">個人學習檔案</h3>
+                        </div>
+                        <div class="space-y-4">
+                           <div>
+                              <label class="block text-sm font-bold text-slate-600 mb-1 ml-1">暱稱</label>
+                              <input type="text" class="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50/50 font-bold focus:ring-2 focus:ring-pink-300 outline-none" value="${this.state.userProfile.nickname}" onchange="app.state.userProfile.nickname = this.value" placeholder="例如：小櫻" />
+                           </div>
+                           <div>
+                              <label class="block text-sm font-bold text-slate-600 mb-1 ml-1">興趣愛好</label>
+                              <input type="text" class="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50/50 font-bold focus:ring-2 focus:ring-pink-300 outline-none" value="${this.state.userProfile.interests}" onchange="app.state.userProfile.interests = this.value" placeholder="例如：拉麵、攝影..." />
+                           </div>
+                           <button onclick="app.handleProfileSave()" class="w-full bg-slate-800 text-white py-3.5 rounded-xl font-bold hover:bg-slate-900 active:scale-95 transition shadow-lg mt-2">儲存檔案</button>
+                        </div>
+                    </div>`;
+                }
+                else if (name === 'gallery') {
+                    let themesHtml = this.state.myThemes.map(t => `
+                       <button onclick="app.applyTheme(app.state.myThemes.find(x => x.id === '${t.id}'))" class="relative rounded-3xl p-6 h-36 text-left transition-all overflow-hidden group shadow-sm hover:shadow-lg ${this.state.activeTheme.id === t.id ? 'ring-4 ring-pink-400 scale-[1.02] z-10' : 'hover:scale-[1.01]'}">
+                          <div class="absolute inset-0 transition-transform duration-500 group-hover:scale-110 ${!t.isCustom ? t.style : ''}" style="${t.isCustom ? t.styleObject.background : ''}"></div>
+                          <div class="relative z-10 flex flex-col justify-between h-full ${t.isDark ? 'text-white' : 'text-slate-800'}">
+                             <div class="flex justify-between items-start">
+                                <span class="font-black text-xl flex items-center gap-2 drop-shadow-sm">${t.name}</span>
+                                ${this.state.activeTheme.id === t.id ? '<div class="bg-white/20 backdrop-blur-md p-1.5 rounded-full"><i data-lucide="check" class="text-white drop-shadow-md"></i></div>' : ''}
+                             </div>
+                          </div>
+                       </button>
+                    `).join('');
+                    
+                    html = `
+                    <div class="relative bg-white/95 backdrop-blur-xl rounded-[2.5rem] p-8 w-full max-w-2xl h-[70vh] flex flex-col shadow-2xl border border-white/60">
+                        <div class="flex justify-between items-center mb-6">
+                           <h3 class="text-2xl font-bold text-slate-800 flex items-center gap-3"><i data-lucide="image" class="text-pink-500"></i> 主題收藏庫</h3>
+                           <button onclick="app.closeAllModals()" class="p-3 hover:bg-slate-100 rounded-full"><i data-lucide="x"></i></button>
+                        </div>
+                        <div class="flex-1 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-4 p-2 custom-scrollbar">${themesHtml}</div>
+                    </div>`;
+                }
+                else if (name === 'skin') {
+                    let skinHtml = this.state.unlockedPetals.sort((a,b)=>a-b).map(id => {
+                        const style = window.appHelpers.getExpandedPetalStyle(id, this.state.customPetals);
+                        const isActive = this.state.activePetalId === id;
+                        return `
+                         <button onclick="app.handlePetalSelect(${id})" class="aspect-square rounded-2xl flex flex-col items-center justify-center border-2 transition-all relative overflow-hidden group ${isActive ? 'border-pink-500 bg-pink-50 shadow-md scale-105' : 'border-slate-100 hover:border-pink-200 bg-white'}">
+                           <div class="text-3xl mb-1 transform group-hover:scale-110 transition-transform" style="text-shadow: 0 2px 10px ${style.color}">${style.char}</div>
+                           <div class="text-[10px] text-slate-400 font-mono font-bold">#${id}</div>
+                         </button>`;
+                    }).join('');
+
+                    html = `
+                    <div class="relative bg-white/95 backdrop-blur-xl rounded-[2.5rem] p-8 w-full max-w-xl h-[85vh] flex flex-col shadow-2xl border border-white/60">
+                       <div class="flex justify-between items-center mb-6">
+                         <h3 class="text-2xl font-bold text-slate-800 flex items-center gap-3"><i data-lucide="crown" class="text-yellow-500"></i> 飄落樣式</h3>
+                         <button onclick="app.closeAllModals()" class="p-3 hover:bg-slate-100 rounded-full"><i data-lucide="x"></i></button>
+                       </div>
+                       <div class="flex-1 overflow-y-auto grid grid-cols-4 sm:grid-cols-5 gap-3 p-2 custom-scrollbar content-start">${skinHtml}</div>
+                    </div>`;
+                }
+                else if (name === 'history') {
+                    let listHtml = this.state.history.map(item => `
+                        <div class="group bg-white border border-slate-100 hover:border-pink-300 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all cursor-pointer flex justify-between items-center relative overflow-hidden">
+                          <div class="flex-1 pr-4" onclick="app.renderResult(app.state.history.find(x => x.id === '${item.id}')); app.closeAllModals()">
+                            <div class="flex items-baseline gap-2 mb-1">
+                              <span class="text-xl font-bold text-slate-800">${item.japanese}</span>
+                              <span class="text-xs text-slate-400 font-mono bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">${item.romaji}</span>
+                            </div>
+                            <p class="text-sm text-slate-600 line-clamp-1 font-medium">${item.chinese}</p>
+                          </div>
+                          <div class="flex items-center gap-2 z-10">
+                             <button onclick="app.speak('${item.japanese}')" class="p-2 text-slate-300 hover:text-blue-500 hover:bg-blue-50 rounded-full transition opacity-0 group-hover:opacity-100"><i data-lucide="volume-2"></i></button>
+                          </div>
+                        </div>
+                    `).join('');
+
+                    html = `
+                    <div class="relative w-full max-w-lg bg-white/95 backdrop-blur-xl h-full shadow-2xl p-6 md:p-8 overflow-y-auto animate-in slide-in-from-right duration-300 border-l border-white/50 ml-auto pointer-events-auto">
+                        <div class="flex justify-between items-center mb-8 sticky top-0 bg-white/0 z-10 py-2">
+                          <h3 class="text-2xl font-black text-slate-800 flex items-center gap-3"><i data-lucide="history" class="text-pink-600"></i> 學習足跡</h3>
+                          <button onclick="app.closeAllModals()" class="p-2 hover:bg-slate-100 rounded-full transition"><i data-lucide="x" class="text-slate-500"></i></button>
+                        </div>
+                        <div class="space-y-4">${listHtml || '<div class="text-center text-slate-400 py-10">尚無紀錄</div>'}</div>
+                    </div>`;
+                    
+                    // History needs a different layout (full height sidebar)
+                    container.classList.remove('items-center', 'justify-center', 'p-4');
+                    container.classList.add('block'); // Reset flex
+                }
+                else if (name === 'daily_reward_picker') {
+                    this.prepareDailyOptions();
+                    this.state.rewardReveal = { isRevealed: false, selectedId: null };
+                    
+                    // We render initial state here. The click handler will re-render inner content.
+                    html = this.getDailyRewardHtml();
+                }
+                else if (name === 'flashcard') {
+                    // Init Quiz
+                    const uniqueKanji = this.getUniqueKanji();
+                    this.state.kanjiQuizDeck = [...uniqueKanji].sort(() => 0.5 - Math.random());
+                    this.state.currentQuizIndex = 0;
+                    this.state.quizInput = '';
+                    this.state.quizStatus = 'idle';
+                    
+                    html = this.getQuizHtml();
+                }
+
+                container.innerHTML = html;
+                lucide.createIcons();
+            },
+
+            closeAllModals: function() {
+                document.getElementById('modal-overlay').classList.add('hidden');
+                const container = document.getElementById('modal-container');
+                container.classList.add('hidden');
+                container.classList.add('pointer-events-none');
+                container.classList.add('items-center', 'justify-center', 'p-4'); // Reset layout for next use
+                container.classList.remove('block');
+                container.innerHTML = '';
+            },
+
+            // --- Specific HTML Generators ---
+            getDailyRewardHtml: function() {
+                const { petalOptions, rewardReveal } = this.state;
+                
+                const cardsHtml = petalOptions.map((pid, index) => {
+                    const style = window.appHelpers.getExpandedPetalStyle(pid, this.state.customPetals);
+                    const isSelected = rewardReveal.selectedId === pid;
+                    const isFlipped = rewardReveal.isRevealed; // All flip once revealed
+                    
+                    return `
+                    <button 
+                        onclick="app.handleDailyRewardPick(${pid})" 
+                        ${rewardReveal.isRevealed ? 'disabled' : ''}
+                        class="group relative aspect-[3/4] rounded-3xl transition-all duration-700 preserve-3d cursor-pointer ${rewardReveal.isRevealed && !isSelected ? 'opacity-70 grayscale' : isSelected ? 'shadow-[0_0_50px_rgba(253,224,71,0.5)]' : 'hover:-translate-y-2 hover:shadow-[0_0_30px_rgba(244,114,182,0.3)]'}"
+                        style="transform: ${isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)'}"
+                    >
+                        <!-- FRONT (Mystery) - Hidden opacity when flipped -->
+                        <div class="absolute inset-0 backface-hidden bg-gradient-to-br from-slate-700 to-slate-800 border border-white/10 rounded-3xl flex flex-col items-center justify-center shadow-2xl overflow-hidden z-20 transition-opacity duration-300 ${isFlipped ? 'opacity-0' : 'opacity-100'}">
+                            <div class="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
+                            <div class="w-12 h-12 md:w-20 md:h-20 rounded-full border-2 border-dashed border-white/20 flex items-center justify-center animate-pulse">
+                                <i data-lucide="help-circle" class="text-white/40 w-8 h-8 md:w-10 md:h-10"></i>
+                            </div>
+                            <div class="mt-2 md:mt-4 text-[10px] md:text-xs text-white/30 font-mono tracking-widest">REVEAL</div>
+                        </div>
+
+                        <!-- BACK (Revealed) -->
+                        <div class="absolute inset-0 backface-hidden rounded-3xl flex flex-col items-center justify-center overflow-hidden border-2 z-10 ${isSelected ? 'bg-gradient-to-b from-white/10 to-white/5 border-yellow-300 shadow-[inset_0_0_30px_rgba(253,224,71,0.2)]' : 'bg-white/10 border-white/10 bg-slate-800'}"
+                             style="transform: rotateY(180deg)">
+                            ${isSelected ? '<div class="absolute inset-0 bg-yellow-400/20 blur-xl animate-pulse"></div>' : ''}
+                            <div class="relative z-10 transform transition-transform duration-500 scale-110 flex flex-col items-center">
+                                <div class="text-4xl md:text-7xl mb-2 md:mb-6 drop-shadow-[0_0_15px_rgba(255,255,255,0.5)] ${isSelected ? 'animate-bounce' : ''}">${style.char}</div>
+                                <div>
+                                    <div class="text-[10px] md:text-sm font-bold ${isSelected ? 'text-yellow-300' : 'text-slate-400'} mb-1">${style.name}</div>
+                                    ${isSelected ? '<div class="text-[10px] md:text-xs text-white font-mono bg-white/20 px-2 py-0.5 rounded-full inline-block">GET!</div>' : ''}
+                                </div>
+                            </div>
+                        </div>
+                    </button>
+                    `;
+                }).join('');
+
+                return `
+                <div class="relative bg-gradient-to-b from-slate-800 to-slate-900 rounded-[3rem] p-8 w-full max-w-3xl shadow-2xl text-center border border-white/10 animate-in zoom-in-95 duration-500 max-h-[90vh] overflow-y-auto custom-scrollbar">
+                     <button onclick="app.closeAllModals()" class="absolute top-6 right-6 p-2 bg-white/10 text-white rounded-full hover:bg-white/20 transition z-50"><i data-lucide="x"></i></button>
+                     
+                     <div class="relative z-10 mb-6">
+                         <div class="inline-flex items-center justify-center p-3 bg-white/10 rounded-full mb-4 backdrop-blur-md border border-white/10">
+                             <i data-lucide="sparkles" class="text-yellow-300 mr-2"></i>
+                             <span class="text-yellow-100 font-bold tracking-widest text-sm uppercase">Daily Fortune</span>
+                         </div>
+                         <h3 class="text-3xl md:text-4xl font-black text-white mb-2 tracking-tight">
+                             ${rewardReveal.isRevealed ? "命運已揭曉！" : "今日運勢三選一"}
+                         </h3>
+                     </div>
+                     
+                     <div class="grid grid-cols-3 gap-2 md:gap-6 mb-8 px-1 md:px-4 perspective-1000">
+                        ${cardsHtml}
+                     </div>
+                     
+                     ${rewardReveal.isRevealed ? `
+                        <div class="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <button onclick="app.closeAllModals()" class="bg-white text-slate-900 px-10 py-3 rounded-xl font-bold hover:scale-105 active:scale-95 transition-all shadow-lg">收下禮物</button>
+                        </div>` 
+                     : '<p class="text-xs text-slate-500 font-mono mt-4">重置時間：每日 00:00</p>'}
+                </div>`;
+            },
+
+            handleDailyRewardPick: async function(id) {
+                if (this.state.rewardReveal.isRevealed) return;
+                
+                // Update State
+                this.state.rewardReveal = { isRevealed: true, selectedId: id };
+                this.state.unlockedPetals.push(id);
+                this.state.activePetalId = id;
+                this.state.lastRewardDate = new Date().toDateString();
+                
+                // Re-render modal to show flip
+                const container = document.getElementById('modal-container');
+                container.innerHTML = this.getDailyRewardHtml();
+                lucide.createIcons();
+                this.updateHeaderStats(); // Update lock status
+                this.startPetals();
+
+                // DB
+                if (this.state.user) {
+                    await updateDoc(doc(this.db, 'artifacts', this.appId, 'users', this.state.user.uid, 'profile', 'gamification'), {
+                        unlockedPetals: this.state.unlockedPetals,
+                        activePetalId: id,
+                        lastRewardDate: this.state.lastRewardDate
+                    });
+                }
+            },
+
+            getQuizHtml: function() {
+                const { kanjiQuizDeck, currentQuizIndex, quizStatus } = this.state;
+                if (!kanjiQuizDeck.length) return '';
+                const current = kanjiQuizDeck[currentQuizIndex];
+
+                return `
+                <div class="relative w-full max-w-lg group">
+                    <button onclick="app.closeAllModals()" class="absolute -top-12 right-0 p-2 text-white/80 hover:text-white hover:bg-white/10 rounded-full transition"><i data-lucide="x"></i></button>
+                    
+                    <div class="flex justify-between items-center mb-4 text-white font-bold px-2">
+                         <span class="flex items-center gap-2"><i data-lucide="brain-circuit"></i> 漢字讀音特訓</span>
+                         <span>${currentQuizIndex + 1} / ${kanjiQuizDeck.length}</span>
+                    </div>
+
+                    <div class="bg-white/95 backdrop-blur-xl rounded-[2.5rem] p-6 shadow-2xl border border-white overflow-hidden">
+                        <div class="flex gap-4 items-stretch mb-6">
+                            <div class="w-32 h-32 bg-slate-100 border-2 border-slate-200 rounded-3xl flex items-center justify-center flex-shrink-0 shadow-inner">
+                                <span class="text-6xl font-serif font-black text-slate-800">${current.char}</span>
+                            </div>
+                            <div class="flex-1 flex flex-col justify-center">
+                                <h3 class="text-xl font-bold text-slate-800 mb-1">含義 (Meaning)</h3>
+                                <p class="text-lg text-slate-600 font-medium">${current.meaning}</p>
+                            </div>
+                        </div>
+
+                        <div class="transition-all duration-500 rounded-2xl p-6 border-2 ${quizStatus === 'correct' ? 'bg-indigo-50 border-indigo-200' : 'bg-slate-50 border-slate-100'}">
+                            ${quizStatus === 'correct' ? `
+                                <div class="animate-in fade-in zoom-in-95 duration-300">
+                                    <div class="flex justify-between items-start mb-4">
+                                        <h4 class="font-bold text-indigo-600 flex items-center gap-2"><i data-lucide="check-circle-2"></i> 正確答案</h4>
+                                        <button onclick="app.speak('${current.char}')" class="bg-indigo-100 text-indigo-500 p-2 rounded-full hover:bg-indigo-200 transition"><i data-lucide="volume-2" width="20"></i></button>
+                                    </div>
+                                    <div class="space-y-3">
+                                        <div class="flex items-start gap-3">
+                                            <span class="text-pink-500 font-bold text-xs bg-pink-100 px-2 py-1 rounded shrink-0">音讀</span>
+                                            <span class="font-medium text-slate-700">${current.onyomi || "-"}</span>
+                                        </div>
+                                        <div class="flex items-start gap-3">
+                                            <span class="text-blue-500 font-bold text-xs bg-blue-100 px-2 py-1 rounded shrink-0">訓讀</span>
+                                            <span class="font-medium text-slate-700">${current.kunyomi || "-"}</span>
+                                        </div>
+                                    </div>
+                                    <button onclick="app.nextQuizCard()" class="w-full mt-6 bg-slate-800 text-white font-bold py-3 rounded-xl hover:bg-slate-900 transition flex items-center justify-center gap-2">
+                                        下一題 <i data-lucide="chevron-right"></i>
+                                    </button>
+                                </div>
+                            ` : `
+                                <div class="${quizStatus === 'wrong' ? 'animate-shake' : ''}">
+                                    <div class="flex justify-between items-center mb-4">
+                                        <label class="text-sm font-bold text-slate-500 flex items-center gap-2"><i data-lucide="lightbulb" class="text-yellow-500" width="16"></i> 請輸入讀音 (平假名)</label>
+                                    </div>
+                                    <input type="text" id="quiz-input"
+                                        class="w-full bg-white border-2 ${quizStatus === 'wrong' ? 'border-red-400 bg-red-50' : 'border-slate-200 focus:border-indigo-400'} rounded-xl px-4 py-3 text-lg font-bold outline-none placeholder:text-slate-300 transition-all text-center"
+                                        placeholder="例如: さくら / sakura"
+                                        onkeydown="if(event.key === 'Enter') app.handleQuizSubmit()"
+                                        autofocus
+                                    />
+                                    <div class="flex gap-3 mt-4">
+                                        <button onclick="app.state.quizStatus = 'correct'; document.getElementById('modal-container').innerHTML = app.getQuizHtml(); lucide.createIcons()" class="flex-1 bg-white border-2 border-slate-200 text-slate-400 font-bold py-3 rounded-xl hover:bg-slate-50 transition text-sm">
+                                            放棄 (看答案)
+                                        </button>
+                                        <button onclick="app.handleQuizSubmit()" class="flex-[2] bg-indigo-600 text-white font-bold py-3 rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition flex items-center justify-center gap-2">
+                                            <i data-lucide="send" width="18"></i> 送出
+                                        </button>
+                                    </div>
+                                </div>
+                            `}
+                        </div>
+                    </div>
+                </div>`;
+            },
+
+            handleQuizSubmit: function() {
+                const input = document.getElementById('quiz-input');
+                const val = input ? input.value.trim().toLowerCase() : '';
+                if (val.length > 0) {
+                    this.state.quizStatus = 'correct';
+                    this.speak(this.state.kanjiQuizDeck[this.state.currentQuizIndex].char);
+                } else {
+                    this.state.quizStatus = 'wrong';
+                    setTimeout(() => {
+                        this.state.quizStatus = 'idle';
+                        document.getElementById('modal-container').innerHTML = this.getQuizHtml();
+                        lucide.createIcons();
+                        // Re-focus input if it exists
+                        const newInput = document.getElementById('quiz-input');
+                        if (newInput) newInput.focus();
+                    }, 500);
+                }
+                document.getElementById('modal-container').innerHTML = this.getQuizHtml();
+                lucide.createIcons();
+            },
+
+            nextQuizCard: function() {
+                this.state.currentQuizIndex = (this.state.currentQuizIndex + 1) % this.state.kanjiQuizDeck.length;
+                this.state.quizStatus = 'idle';
+                document.getElementById('modal-container').innerHTML = this.getQuizHtml();
+                lucide.createIcons();
+            },
+
+            checkKanjiGame: function() {
+                if (this.getUniqueKanji().length >= 10) {
+                    this.openModal('flashcard');
+                }
+            },
+
+            handlePetalSelect: function(id) {
+                this.state.activePetalId = id;
+                this.startPetals();
+                if (this.state.user) {
+                    updateDoc(doc(this.db, 'artifacts', this.appId, 'users', this.state.user.uid, 'profile', 'gamification'), { activePetalId: id });
+                }
+                this.openModal('skin'); // Re-render to show active
+            },
+
+            copyToClipboard: function(text) {
+                navigator.clipboard.writeText(text);
+                // Can add toast here if needed
+            },
+
+            toggleMute: function() {
+                this.state.isMuted = !this.state.isMuted;
+                document.getElementById('mute-icon').setAttribute('data-lucide', this.state.isMuted ? 'volume-x' : 'volume-2');
+                lucide.createIcons();
+                if (this.state.user) {
+                    updateDoc(doc(this.db, 'artifacts', this.appId, 'users', this.state.user.uid, 'profile', 'gamification'), { isMuted: this.state.isMuted });
+                }
+            }
+        };
+
+        // Initialize
+        app.init();
+    </script>
+</body>
+</html>
