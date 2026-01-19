@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>台越學習助手 (Taiwan-Vietnam Learning Assistant)</title>
+    <meta property="og:title" content="台越學習助手 (Taiwan-Vietnam Learning Assistant)">
+    <meta property="og:description" content="AI 驅動的台語/繁體中文與越南語學習工具，提供注音、發音與詞彙卡片功能。">
+    <meta property="og:url" content="https://taiwanvietnam.vercel.app/">
+    <meta property="og:type" content="website">
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -46,7 +50,7 @@
           History, Trash2, CheckCircle, Languages, ExternalLink,
           PenTool, X, ChevronRight, Home, GraduationCap, RefreshCw,
           MonitorPlay, Star, AlertCircle, Layout, ArrowRight, XCircle,
-          WifiOff, BrainCircuit, Sparkles, ClipboardCopy, Speaker
+          WifiOff, BrainCircuit, Sparkles, ClipboardCopy, Speaker, Share2
         } from 'https://esm.sh/lucide-react@0.292.0';
 
         // Import Firebase
@@ -102,6 +106,7 @@
             const [quizStatus, setQuizStatus] = useState('idle');
             const [deleteId, setDeleteId] = useState(null);
             const [isOffline, setIsOffline] = useState(!dbInstance);
+            const [shared, setShared] = useState(false);
 
             // --- Auth & Data ---
             useEffect(() => {
@@ -247,7 +252,6 @@
             };
 
             const toggleCard = async (char, e) => {
-                // Fix: 停止事件冒泡，防止點擊星星時觸發其他卡片行為
                 if (e) {
                     e.preventDefault();
                     e.stopPropagation();
@@ -255,7 +259,6 @@
 
                 const exist = flashcards.find(f => f.char === char.char);
 
-                // Fix: 離線或無使用者時，操作本地狀態
                 if (isOffline || !user) {
                     if (exist) {
                         setFlashcards(prev => prev.filter(f => f.char !== char.char));
@@ -265,13 +268,11 @@
                     return;
                 }
 
-                // 線上模式
                 try {
                     if (exist) await deleteDoc(doc(dbInstance, 'artifacts', appIdVal, 'users', user.uid, 'flashcards', exist.id));
                     else await addDoc(collection(dbInstance, 'artifacts', appIdVal, 'users', user.uid, 'flashcards'), { ...char, timestamp: serverTimestamp() });
                 } catch(err) {
                     console.error("DB Error", err);
-                    // 如果DB失敗，嘗試本地更新以保持UI響應
                     if (exist) {
                         setFlashcards(prev => prev.filter(f => f.char !== char.char));
                     } else {
@@ -297,7 +298,6 @@
             const delHistory = async () => {
                 if (!deleteId) { setDeleteId(null); return; }
                 
-                // Fix: 離線刪除
                 if (isOffline || !user) {
                      setHistory(prev => prev.filter(item => item.id !== deleteId));
                      setDeleteId(null);
@@ -313,12 +313,46 @@
                 setDeleteId(null);
             };
 
+            // Fix for Clipboard API Error: Fallback mechanism
+            const copyToClipboard = (text) => {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
+                } else {
+                    fallbackCopy(text);
+                }
+            };
+
+            const fallbackCopy = (text) => {
+                const textArea = document.createElement("textarea");
+                textArea.value = text;
+                textArea.style.position = "fixed";
+                textArea.style.left = "-9999px";
+                textArea.style.top = "0";
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                } catch (err) {
+                    console.error('Fallback copy failed', err);
+                }
+                document.body.removeChild(textArea);
+            };
+
             const copyResult = () => {
                 if (!result) return;
                 const text = `${result.chinese}\n${result.zhuyin}\n${result.explanation}`;
-                navigator.clipboard.writeText(text);
+                copyToClipboard(text);
                 setCopied(true);
                 setTimeout(() => setCopied(false), 2000);
+            };
+
+            const shareApp = () => {
+                const url = 'https://taiwanvietnam.vercel.app/';
+                copyToClipboard(url);
+                setShared(true);
+                setTimeout(() => setShared(false), 2000);
+                speak("Đã sao chép liên kết");
             };
 
             // --- Sub-Components ---
@@ -353,26 +387,33 @@
                 
                 // Header
                 React.createElement('header', { className: "fixed top-0 inset-x-0 z-40 bg-[#F8F9FA]/90 backdrop-blur-2xl border-b border-white/40 py-3 px-4 shadow-[0_4px_30px_rgba(0,0,0,0.03)] safe-top transition-all duration-500" },
-                    React.createElement('div', { className: "max-w-2xl mx-auto flex items-center justify-between" },
+                    React.createElement('div', { className: "max-w-2xl mx-auto flex items-center justify-between gap-3" },
                         React.createElement('div', { 
-                            className: "flex items-center gap-3 cursor-pointer group",
+                            className: "flex items-center gap-3 cursor-pointer group flex-shrink-0",
                             onClick: () => speak("台越學習助手"),
                             title: "Nghe phát âm tên App"
                         },
                             React.createElement('div', { className: "bg-stone-900 text-white p-2.5 rounded-2xl shadow-xl shadow-stone-200 group-hover:scale-105 group-active:scale-95 transition-transform duration-300" }, React.createElement(Languages, { size: 22 })),
-                            React.createElement('div', null,
+                            React.createElement('div', { className: "hidden sm:block" },
                                 React.createElement('h1', { className: "font-bold text-stone-900 leading-none text-lg tracking-tight group-hover:text-blue-600 transition-colors duration-300" }, "Trợ lý tiếng Đài"),
                                 React.createElement('span', { className: "text-[10px] text-stone-400 font-bold tracking-widest uppercase" }, "TW-VN AI")
                             )
                         ),
-                        React.createElement('div', { className: "flex bg-white/80 backdrop-blur p-1.5 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.04)] border border-white" },
-                            [{id:'home',l:'Dịch'},{id:'practice',l:'Từ vựng',c:flashcards.length},{id:'history',l:'Lịch sử'}].map(t => 
-                                React.createElement('button', {
-                                    key: t.id,
-                                    onClick: () => setActiveTab(t.id),
-                                    className: `px-5 py-2 rounded-full text-xs font-bold transition-all duration-300 relative active:scale-95 ${activeTab===t.id?'bg-stone-900 text-white shadow-lg':'text-stone-400 hover:bg-stone-100/50 hover:text-stone-600'}`
-                                }, t.l, t.c > 0 && activeTab !== t.id && React.createElement('span', { className: "absolute top-1 right-2 w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" }))
-                            )
+                        React.createElement('div', { className: "flex items-center gap-2" },
+                             React.createElement('div', { className: "flex bg-white/80 backdrop-blur p-1.5 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.04)] border border-white overflow-x-auto no-scrollbar" },
+                                [{id:'home',l:'Dịch'},{id:'practice',l:'Từ vựng',c:flashcards.length},{id:'history',l:'Lịch sử'}].map(t => 
+                                    React.createElement('button', {
+                                        key: t.id,
+                                        onClick: () => setActiveTab(t.id),
+                                        className: `px-4 sm:px-5 py-2 rounded-full text-xs font-bold transition-all duration-300 relative active:scale-95 whitespace-nowrap ${activeTab===t.id?'bg-stone-900 text-white shadow-lg':'text-stone-400 hover:bg-stone-100/50 hover:text-stone-600'}`
+                                    }, t.l, t.c > 0 && activeTab !== t.id && React.createElement('span', { className: "absolute top-1 right-2 w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" }))
+                                )
+                            ),
+                            React.createElement('button', {
+                                onClick: shareApp,
+                                title: "Chia sẻ ứng dụng",
+                                className: "bg-white/80 backdrop-blur p-2.5 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.04)] border border-white text-stone-400 hover:text-stone-900 hover:scale-105 active:scale-95 transition-all duration-300"
+                            }, shared ? React.createElement(CheckCircle, { size: 20, className: "text-green-500" }) : React.createElement(Share2, { size: 20 }))
                         )
                     )
                 ),
@@ -401,7 +442,7 @@
                                 onClick: () => analyzeText(),
                                 disabled: loading,
                                 className: "bg-stone-900 text-white px-8 h-16 rounded-[2rem] flex items-center justify-center gap-2 shadow-xl hover:shadow-2xl hover:bg-black hover:scale-[1.02] active:scale-95 disabled:bg-stone-200 disabled:shadow-none disabled:scale-100 transition-all duration-300 shrink-0 ease-out"
-                            }, loading ? React.createElement(Loader2, { className: "animate-spin", size: 24 }) : React.createElement(React.Fragment, null, React.createElement('span', { className: "font-bold text-lg" }, "Dịch"), React.createElement(ArrowRight, { size: 24 })))
+                            }, loading ? React.createElement(Loader2, { className: "animate-spin", size: 24 }) : React.createElement(React.Fragment, null, React.createElement('span', { className: "font-bold text-lg hidden sm:inline" }, "Dịch"), React.createElement(ArrowRight, { size: 24 })))
                         ),
 
                         error && React.createElement('div', { className: "bg-red-50/80 backdrop-blur-md border border-red-100/50 text-red-600 p-5 rounded-[2rem] flex items-center gap-3 text-sm font-bold shadow-lg animate-in fade-in slide-in-from-top-4 duration-500" }, React.createElement(AlertCircle, { size: 20 }), error),
