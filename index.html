@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LifeOS v9.9 (Cloud Neural Link)</title>
+    <title>LifeOS v9.9.1 (Hybrid Sync Engine)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -70,7 +70,7 @@
         // 1. 全域設定與常數 (Global Configuration)
         // ============================================================================
 
-        const VERSION = "9.9 (Full Cloud Sync)"; 
+        const VERSION = "9.9.1 (Hybrid Sync Engine)"; 
 
         const STORAGE_KEY_LOGS = 'life_os_logs_v8_0'; 
         const STORAGE_KEY_CONFIG = 'life_os_config_v8_0'; 
@@ -662,7 +662,7 @@
 
             const showToast = (msg, type='success') => { setNotification({msg, type}); setTimeout(() => setNotification(null), 3000); };
 
-            // [New] Cloud Sync Logic
+            // [Modified] Sync from Inbox AND Archive (v3.5.1 Compatible)
             const syncFromGitHub = async () => {
                 if (!userSettings.github?.token || !userSettings.github?.owner || !userSettings.github?.repo) {
                     showToast("⚠️ 請先設定 GitHub 資訊", "warning");
@@ -670,71 +670,125 @@
                 }
                 
                 setIsSyncing(true);
-                showToast("☁️ 開始同步...", "info");
+                showToast("☁️ 連接神經網路 (Syncing)...", "info");
 
                 try {
                     const { owner, repo, token } = userSettings.github;
                     const headers = { 'Authorization': `token ${token}` };
+                    const baseUrl = `https://api.github.com/repos/${owner}/${repo}/contents`;
 
-                    // Helper to fetch files from a folder
-                    const fetchFolder = async (path) => {
-                        const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${path}`, { headers });
-                        if (!res.ok) return [];
-                        const files = await res.json();
-                        if (!Array.isArray(files)) return [];
-                        return files.filter(f => f.name.endsWith('.json'));
-                    };
-
-                    // [Step 3 Implemented] Fetch from both Inbox and Archive
-                    const [inboxFiles, archiveFiles] = await Promise.all([
-                        fetchFolder('data/inbox'),
-                        fetchFolder('data/archive') 
-                    ]);
-
-                    const allFiles = [...inboxFiles, ...archiveFiles];
-
-                    if (allFiles.length === 0) {
-                         showToast("☁️ 雲端無新資料");
-                         // If we found nothing new, we don't throw error, just finish.
-                         // But if fetch failed, fetchFolder returns [], so we might silently fail. 
-                         // For simplicity in this lightweight app, this is acceptable.
-                    } else {
-                        const cloudLogs = await Promise.all(allFiles.map(async (file) => {
-                            const contentRes = await fetch(file.download_url);
-                            const data = await contentRes.json();
-                            // Transform backend JSON to frontend Log format
-                            const date = data.analysis?.date || data.date || "1970-01-01";
-                            return sanitizeLogEntry({
-                                date: date,
-                                note: data.raw_text || data.note || "",
-                                metrics: { 
-                                    mood: data.analysis?.mood || 5,
-                                    focus: data.analysis?.focus || 5,
-                                    energy: data.analysis?.energy || 5,
-                                    deepWork: 0
-                                },
-                                graphSeeds: {
-                                    tags: (data.analysis?.tags || []).join(' '),
-                                    links: '', // Populate if available
-                                    graph: ''
-                                }
-                            });
-                        }));
+                    // --- 1. Fetch Archive (長期記憶) ---
+                    let archivedLogs = [];
+                    try {
+                        // 使用 API 取得檔案 metadata 以獲取 download_url
+                        const archiveRes = await fetch(`${baseUrl}/data/archive/lifeos_db.json`, { headers });
                         
-                        // Merge with local logs
-                        setLogs(prev => {
-                            const combined = [...prev];
-                            cloudLogs.forEach(cloudLog => {
-                                const idx = combined.findIndex(l => l.date === cloudLog.date);
-                                if (idx >= 0) combined[idx] = cloudLog;
-                                else combined.push(cloudLog);
-                            });
-                            return combined.sort((a,b) => new Date(a.date) - new Date(b.date));
-                        });
-                        showToast(`✅ 同步完成 (共 ${cloudLogs.length} 筆)`);
+                        if (archiveRes.ok) {
+                            const fileData = await archiveRes.json();
+                            // 再次 fetch download_url 取得實際內容
+                            const contentRes = await fetch(fileData.download_url); 
+                            const rawArchive = await contentRes.json();
+                            
+                            if (Array.isArray(rawArchive)) {
+                                archivedLogs = rawArchive.map(row => sanitizeLogEntry({
+                                    date: row.date,
+                                    // 兼容舊格式 note 或新格式 content
+                                    note: row.content || row.note || "", 
+                                    metrics: { 
+                                        mood: row.mood || row.metrics?.mood || 5,
+                                        focus: row.focus || row.metrics?.focus || 5,
+                                        energy: row.energy || row.metrics?.energy || 5,
+                                        deepWork: row.deepWork || row.metrics?.deepWork || 0
+                                    },
+                                    graphSeeds: {
+                                        tags: Array.isArray(row.tags) ? row.tags.join(' ') : (row.tags || ''),
+                                        links: '', 
+                                        graph: '' 
+                                    },
+                                    habits: row.habits || {}
+                                }));
+                            }
+                        } else {
+                            console.log("Archive not found (first run?)");
+                        }
+                    } catch (e) {
+                        console.warn("Archive fetch skipped:", e);
                     }
+
+                    // --- 2. Fetch Inbox (短期記憶) ---
+                    let inboxLogs = [];
+                    try {
+                        const inboxRes = await fetch(`${baseUrl}/data/inbox`, { headers });
+                        
+                        if (inboxRes.ok) {
+                            const files = await inboxRes.json();
+                            if (Array.isArray(files)) {
+                                // 只抓取 .json 檔 (Sidecar)，假設它包含了我們需要的 metadata
+                                const jsonFiles = files.filter(f => f.name.endsWith('.json'));
+                                
+                                inboxLogs = await Promise.all(jsonFiles.map(async (file) => {
+                                    const contentRes = await fetch(file.download_url);
+                                    const data = await contentRes.json();
+                                    
+                                    // 處理 Sidecar 結構
+                                    const analysis = data.analysis || {};
+                                    // 嘗試從 data.raw_text (如果 process_inbox.py 有存) 或 analysis.summary 取得內容
+                                    const noteContent = data.raw_text || data.note || (analysis.summary ? `> ${analysis.summary}` : "Processing...");
+                                    
+                                    // 嘗試從檔名解析日期 (如果 JSON 裡沒有)
+                                    // 檔名格式預期: 20260121_1030_uuid.json
+                                    let dateStr = analysis.date || data.date;
+                                    if (!dateStr) {
+                                        const match = file.name.match(/^(\d{4})(\d{2})(\d{2})/);
+                                        if (match) dateStr = `${match[1]}-${match[2]}-${match[3]}`;
+                                        else dateStr = new Date().toISOString().split('T')[0];
+                                    }
+
+                                    return sanitizeLogEntry({
+                                        date: dateStr,
+                                        note: noteContent,
+                                        metrics: { 
+                                            mood: analysis.mood || 5,
+                                            focus: analysis.focus || 5,
+                                            energy: analysis.energy || 5,
+                                            deepWork: 0
+                                        },
+                                        graphSeeds: {
+                                            tags: Array.isArray(analysis.tags) ? analysis.tags.join(' ') : (analysis.tags || ''),
+                                            links: '',
+                                            graph: ''
+                                        }
+                                    });
+                                }));
+                            }
+                        }
+                    } catch (e) {
+                        console.warn("Inbox fetch skipped or empty:", e);
+                    }
+
+                    // --- 3. Merge Strategy (Inbox Wins) ---
+                    setLogs(prev => {
+                        const combinedMap = new Map();
+                        
+                        // 1. 放入 Archive (舊)
+                        archivedLogs.forEach(log => combinedMap.set(log.date, log));
+                        
+                        // 2. 放入 Inbox (新 - 會覆蓋舊的)
+                        inboxLogs.forEach(log => combinedMap.set(log.date, log));
+
+                        // 3. 轉回 Array 並排序
+                        const merged = Array.from(combinedMap.values()).sort((a,b) => new Date(a.date) - new Date(b.date));
+                        
+                        // 儲存到 LocalStorage
+                        try { localStorage.setItem(STORAGE_KEY_LOGS, JSON.stringify(merged)); } catch(e){}
+                        
+                        return merged;
+                    });
+
+                    showToast(`✅ 同步完成 (Archive:${archivedLogs.length} | Inbox:${inboxLogs.length})`);
+
                 } catch (e) {
-                    console.error("Cloud fetch failed", e);
+                    console.error("Sync Critical Error", e);
                     showToast(`❌ 同步失敗: ${e.message}`, "error");
                 } finally {
                     setIsSyncing(false);
@@ -781,7 +835,6 @@
                 if (userSettings.github?.token && userSettings.github?.owner && userSettings.github?.repo) {
                     try {
                         showToast("🚀 發送至神經雲端...", "info");
-                        // [Step 2] Construct payload for GitHub Action
                         const payload = {
                             event_type: "new_journal_entry",
                             client_payload: {
