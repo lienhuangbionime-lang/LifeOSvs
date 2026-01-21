@@ -7,12 +7,10 @@ import time
 ZAPIER_TASK_WEBHOOK = os.getenv("ZAPIER_TASK_WEBHOOK")
 
 def sync_tasks_to_cloud():
-    # 強制檢查目錄，確認資料來源
     print(f"📂 Current Working Directory: {os.getcwd()}")
-    if os.path.exists("data/inbox"):
-        files = os.listdir('data/inbox')
-        print(f"📂 Listing data/inbox ({len(files)} files): {files}")
-    else:
+    
+    # 確保目錄存在
+    if not os.path.exists("data/inbox"):
         print("❌ ERROR: data/inbox directory does not exist!")
         return
 
@@ -26,40 +24,49 @@ def sync_tasks_to_cloud():
             with open(filepath, 'r', encoding='utf-8') as f:
                 data = json.load(f)
             
-            # 讀取 AI 分析結果
             analysis = data.get('analysis', {})
+            # 相容性：有些舊格式可能是直接 list，有些是 dict
             ai_actions = analysis.get('action_items', [])
             
             if ai_actions:
                 print(f"✅ [{filepath}] Extracted {len(ai_actions)} tasks.")
                 for item in ai_actions:
-                    # 相容性處理
                     task_obj = item if isinstance(item, dict) else {"task": item}
                     
+                    # [VISUAL CLEANUP] 視覺淨化處理
+                    # 1. 移除 [LifeOS] 前綴，直接顯示任務
+                    # 2. Context 改用 Hashtag 格式，較為現代且不佔版面
+                    # 3. Priority 若為 High 才標示 emoji，否則隱藏
+                    
+                    raw_task = task_obj.get('task', 'Untitled')
+                    context = task_obj.get('context', 'General').replace(" ", "")
+                    priority = task_obj.get('priority', 'Med')
+                    
+                    # 只有高優先級才加紅點，保持清爽
+                    priority_mark = "🔴 " if priority.lower() == 'high' else ""
+                    
                     tasks_to_sync.append({
-                        "title": f"[LifeOS] {task_obj.get('task', 'Untitled')}",
-                        "notes": f"Context: {task_obj.get('context', 'General')}\nPriority: {task_obj.get('priority', 'Med')}",
-                        "due": "tomorrow"
+                        "title": f"{priority_mark}{raw_task}",
+                        "notes": f"#{context}", # 極簡化備註
+                        "due": "today" # 或是 tomorrow，視您的習慣
                     })
             else:
-                print(f"⚠️ [{filepath}] No 'action_items' found in AI analysis.")
+                pass # 靜默處理無任務的檔案
                 
         except Exception as e:
             print(f"❌ Error processing {filepath}: {e}")
             
-    # [核心修正] 迴圈單條發送 (Loop Send)
     if tasks_to_sync and ZAPIER_TASK_WEBHOOK:
         print(f"🚀 Sending {len(tasks_to_sync)} tasks to Zapier...")
         for i, task in enumerate(tasks_to_sync):
             try:
-                # [修正點] 發送單一物件，而非 {"tasks": []}
                 requests.post(ZAPIER_TASK_WEBHOOK, json=task)
                 print(f"📨 Sent ({i+1}/{len(tasks_to_sync)}): {task['title']}")
-                time.sleep(1) # 避免過快被擋
+                time.sleep(0.5)
             except Exception as e:
                 print(f"❌ Send Failed: {e}")
     elif not tasks_to_sync:
-        print("💡 No actionable tasks found in any file.")
+        print("💡 No actionable tasks found.")
     else:
         print("⚠️ Tasks found but Webhook URL is missing.")
 
