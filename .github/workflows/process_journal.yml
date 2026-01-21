@@ -9,11 +9,17 @@ permissions:
   contents: write
 
 jobs:
-  neural_pipeline:
+  # Job 1: 確保資料落地 (最高生存優先級)
+  # 即使後續步驟全炸，這裡已經把 Raw Data 鎖進 Git History 了
+  secure_data:
     runs-on: ubuntu-latest
+    outputs:
+      new_sha: ${{ steps.commit.outputs.sha }}
     steps:
       - name: Checkout content
         uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -21,41 +27,86 @@ jobs:
           python-version: '3.9'
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install pandas pyarrow python-frontmatter google-generativeai requests
+        run: pip install google-generativeai python-frontmatter
 
-      # 1. 核心處理 (Gemini 分析 -> 生成 Inbox 檔案)
+      # 1. 生成 Inbox 檔案 (Gemini Parsing)
       - name: 🧠 Neural Intake (Gemini)
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           JOURNAL_TEXT: ${{ github.event.client_payload.text }}
         run: python src/actions/process_inbox.py
 
-      # 2. 自動分類 (Project/Life 分流)
-      - name: 🗂️ Auto-Classification
+      # 2. 立刻 Commit (防禦資料遺失)
+      - name: Commit Raw Entry
+        id: commit
+        run: |
+          git config --global user.name "LifeOS Bot"
+          git config --global user.email "bot@lifeos.ai"
+          git add data/inbox/
+          git commit -m "📝 Log Entry: ${{ github.event.client_payload.metadata.date || 'New Entry' }}" || echo "No changes"
+          git pull --rebase origin main
+          git push
+          echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+  # Job 2: 處理與歸檔 (基於 Job 1 的成果)
+  # 這裡的失敗是「可容忍的」，因為原始資料還在
+  process_data:
+    needs: secure_data
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout content
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ needs.secure_data.outputs.new_sha }} # 拉取 Job 1 剛 Commit 的版本
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: pip install pandas pyarrow python-frontmatter requests google-auth google-api-python-client
+
+      # 3. 專案自動分類 (Dual-Track Splitter)
+      # 必須在 Compaction 之前執行
+      - name: 🔀 Run Dual-Track Splitter
+        continue-on-error: true # 分類失敗不應阻止歸檔
         run: python src/actions/classify_inbox.py
 
-      # 3. 任務同步 (傳送至 Zapier -> Google Tasks)
-      - name: ✅ Sync Tasks to Google
+      # 4. 任務同步 (Sync Tasks) - 失敗不中斷
+      - name: ✅ Sync Tasks (Zapier/Google)
+        continue-on-error: true
         env:
           ZAPIER_TASK_WEBHOOK: ${{ secrets.ZAPIER_TASK_WEBHOOK }}
-        run: python src/actions/sync_tasks.py
+        # 檢查檔案是否存在再執行，避免報錯
+        run: |
+          if [ -f "src/actions/sync_tasks.py" ]; then
+            python src/actions/sync_tasks.py
+          else
+            echo "sync_tasks.py not found, skipping."
+          fi
 
-      # 4. 報告生成 (可選，每次跑或設排程)
+      # 5. 報告生成 (Generate Report)
       - name: 📊 Generate Project Status
-        run: python src/actions/generate_report.py
+        continue-on-error: true
+        run: |
+          if [ -f "src/actions/generate_report.py" ]; then
+            python src/actions/generate_report.py
+          else
+            echo "generate_report.py not found, skipping."
+          fi
 
-      # 5. 資料壓縮與清理 (Inbox -> Archive)
+      # 6. 壓縮歸檔 (Compaction & Cleanup)
+      # 將 Inbox 轉為 Parquet/JSON 並清空 Inbox
       - name: 🗜️ Compaction & Cleanup
         run: python src/actions/compact_inbox.py
 
-      # 6. 提交所有變更
-      - name: Commit Neural State
+      # 7. 提交系統狀態 (System State)
+      - name: Commit System State
         run: |
           git config --global user.name "LifeOS Bot"
           git config --global user.email "bot@lifeos.ai"
           git add data/
-          git commit -m "🧠 Neural Process Complete: ${{ github.event.client_payload.metadata.date }}" || echo "No changes to commit"
+          git commit -m "⚙️ System Processed & Compacted" || echo "No changes"
           git pull --rebase origin main
           git push
