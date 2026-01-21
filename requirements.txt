@@ -1,0 +1,5 @@
+pandas==2.1.4
+google-genai
+python-frontmatter==1.0.1
+requests==2.31.0
+pyarrow==14.0.2
