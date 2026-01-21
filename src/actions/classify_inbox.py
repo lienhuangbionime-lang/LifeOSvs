@@ -135,7 +135,7 @@ def process_inbox_files():
             tasks = extract_tasks(content)
             if tasks:
                 print(f"Found {len(tasks)} tasks via regex.")
-                send_to_zapier(tasks, date_str)
+                #send_to_zapier(tasks, date_str)
 
         except Exception as e:
             print(f"Error classifying {filepath}: {e}")
