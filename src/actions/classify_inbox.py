@@ -8,10 +8,12 @@ import datetime
 INBOX_DIR = "data/inbox"
 PROJECTS_DIR = "data/projects"
 LIFE_DIR = "data/life"
-STATUS_DIR = "data/status" # [NEW] 狀態目錄
+STATUS_FILE = "data/status/latest_actions.json" # [NEW] Nudge 用的資料來源
 
 def parse_dual_track(raw_text):
-    # ... (原本的 A/B 拆解邏輯保持不變) ...
+    """
+    手術刀：將日記文本拆解為 Project 與 Life 兩部分，並提取 Next Steps
+    """
     # 1. 切割 A. Project Log
     project_match = re.search(r'## A\. Project Log.*?([\s\S]*?)(?=## B\. Life Log|$)', raw_text, re.IGNORECASE)
     project_content = project_match.group(1).strip() if project_match else ""
@@ -26,20 +28,19 @@ def parse_dual_track(raw_text):
     primary_project = valid_project_tags[0] if valid_project_tags else "Uncategorized"
 
     # [NEW] 4. 提取 Tomorrow's MIT (下一步行動)
-    # 抓取 "Tomorrow’s MIT" 或 "Next Step" 下方的列表項目
-    mit_match = re.search(r'(?:Tomorrow’s MIT|Next Steps).*?\n([\s\S]*?)(?=\n###|\n---|$)', project_content, re.IGNORECASE)
+    # 尋找 "Tomorrow's MIT" 或 "Next Steps" 區塊
+    mit_match = re.search(r"(?:Tomorrow’s MIT|Next Steps).*?[:：]?\s*\n([\s\S]*?)(?=\n###|\n##|$)", project_content, re.IGNORECASE)
     next_actions = []
     if mit_match:
-        # 抓取所有以 - 或 * 開頭的行
-        raw_actions = mit_match.group(1).strip()
-        next_actions = re.findall(r'^\s*[-*]\s*(.*)', raw_actions, re.MULTILINE)
+        # 抓取 bullet points
+        lines = mit_match.group(1).strip().split('\n')
+        next_actions = [line.strip().replace('- ', '').replace('* ', '') for line in lines if line.strip().startswith(('- ', '* '))]
 
     return {
         "project": {
             "name": primary_project,
             "content": project_content,
-            "tags": tags,
-            "next_actions": next_actions # [NEW]
+            "next_actions": next_actions
         },
         "life": {
             "content": life_content
@@ -49,18 +50,20 @@ def parse_dual_track(raw_text):
 def process_inbox_files():
     os.makedirs(PROJECTS_DIR, exist_ok=True)
     os.makedirs(LIFE_DIR, exist_ok=True)
-    os.makedirs(STATUS_DIR, exist_ok=True) # [NEW]
+    os.makedirs(os.path.dirname(STATUS_FILE), exist_ok=True)
 
     files = glob.glob(os.path.join(INBOX_DIR, "*.json"))
     
-    current_actions = {} # 用來收集本次處理的所有下一步
+    actions_report = {} # 用來收集所有日記的下一步
 
     for filepath in files:
         with open(filepath, 'r', encoding='utf-8') as f:
             data = json.load(f)
             
-        raw_text = data.get('raw_text', '') or data.get('note', '')
-        date = data.get('date', datetime.datetime.now().strftime('%Y-%m-%d'))
+        # 兼容欄位讀取
+        raw_text = data.get('raw_text', '') or data.get('note', '') 
+        # 從 analysis.date 或 raw data 取得日期
+        date = data.get('analysis', {}).get('date') or data.get('date') or datetime.datetime.now().strftime('%Y-%m-%d')
         
         if not raw_text:
             continue
@@ -74,26 +77,27 @@ def process_inbox_files():
         with open(project_file, 'a', encoding='utf-8') as pf:
             entry_block = f"\n\n### {date} Log\n{parsed['project']['content']}\n\n---"
             pf.write(entry_block)
-
-        # [NEW] 處理下一步行動
-        if parsed['project']['next_actions']:
-            current_actions[project_name] = {
-                "date": date,
-                "actions": parsed['project']['next_actions']
-            }
             
+        print(f"✅ Routed Project Log to: {project_file}")
+
         # --- 路由 2: 生活訊號 ---
-        life_file = os.path.join(LIFE_DIR, f"life_log_{date[:7]}.md")
+        life_file = os.path.join(LIFE_DIR, f"life_log_{date[:7]}.md") 
         with open(life_file, 'a', encoding='utf-8') as lf:
             entry_block = f"\n\n### {date}\n{parsed['life']['content']}\n\n---"
             lf.write(entry_block)
 
-    # [NEW] 輸出 "Active Context" 檔案
-    # 這檔案只包含「最新」的下一步，Action 跑完後可以讀取這個檔案來發送通知
-    if current_actions:
-        with open(os.path.join(STATUS_DIR, "latest_actions.json"), "w", encoding="utf-8") as f:
-            json.dump(current_actions, f, ensure_ascii=False, indent=2)
-            print(f"✅ Extracted Next Actions: {list(current_actions.keys())}")
+        # --- [NEW] 收集下一步行動 ---
+        if parsed['project']['next_actions']:
+            actions_report[project_name] = {
+                "date": date,
+                "actions": parsed['project']['next_actions']
+            }
+
+    # [NEW] 產出 Nudge 用的狀態檔
+    if actions_report:
+        with open(STATUS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(actions_report, f, ensure_ascii=False, indent=2)
+        print(f"🚀 Generated Status File: {STATUS_FILE}")
 
 if __name__ == "__main__":
     process_inbox_files()
