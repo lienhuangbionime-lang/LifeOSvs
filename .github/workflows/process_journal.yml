@@ -18,14 +18,14 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.9'
+        python-version: '3.10'
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pandas pyarrow python-frontmatter
-# ... (前段 setup 相同) ...
+        pip install pandas pyarrow python-frontmatter requests google-generativeai
 
+    # 1. 大腦：接收 Zapier 資料 -> Gemini 分析 -> 產出 Inbox (JSON+MD)
     - name: Run Neural Classifier (Inbox Generation)
       env:
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -33,57 +33,60 @@ jobs:
       run: |
         python src/actions/process_inbox.py
 
+    # 2. 手術刀：讀取 Inbox -> 拆分 Project/Life -> 提取 Next Steps
     - name: Run Dual-Track Splitter (Auto-Classification)
       run: |
         python src/actions/classify_inbox.py
 
-    - name: Commit All Changes
-      run: |
-        git config --global user.name "LifeOS Bot"
-        git config --global user.email "bot@lifeos.ai"
-        git add data/inbox/ data/projects/ data/life/
-        git commit -m "🧠 Neural Process: Inbox + Auto-Classification" || exit 0
-        git pull --rebase origin main
-        git push
-
-    # [NEW] 這裡就是「接球」的動作
-    - name: Save Payload to Inbox
-      if: github.event_name == 'repository_dispatch'
+    # 3. 傳令兵：讀取 Next Steps -> 發送 Telegram
+    - name: Nudge Next Actions via Telegram
       env:
-        PAYLOAD_JSON: '${{ toJson(github.event.client_payload) }}'
+        TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TG_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       run: |
         import os
         import json
-        import datetime
+        import requests
+
+        status_file = "data/status/latest_actions.json"
         
-        try:
-            payload = json.loads(os.environ['PAYLOAD_JSON'])
-            content = payload.get('text', '')
-            meta = payload.get('metadata', {})
-            date = meta.get('date', datetime.datetime.now().strftime('%Y-%m-%d'))
+        if os.path.exists(status_file) and os.getenv("TG_TOKEN"):
+            with open(status_file, 'r') as f:
+                actions_map = json.load(f)
             
-            # 確保資料夾存在
-            os.makedirs('data/inbox', exist_ok=True)
-            
-            # 寫入 Markdown 檔案
-            filename = f"data/inbox/{date}.md"
-            with open(filename, 'w', encoding='utf-8') as f:
-                f.write("---\n")
-                f.write(f"date: {date}\n")
-                f.write(f"mood: {meta.get('mood', 5)}\n")
-                f.write("---\n\n")
-                f.write(content)
+            if actions_map:
+                msg_lines = ["🚀 **Project Update Confirmed**", ""]
+                for proj, data in actions_map.items():
+                    msg_lines.append(f"📂 *{proj}* ({data['date']})")
+                    for action in data['actions']:
+                        msg_lines.append(f"• {action}")
+                    msg_lines.append("")
                 
-            print(f"✅ Created {filename}")
-        except Exception as e:
-            print(f"❌ Error saving payload: {e}")
+                msg_lines.append("Next step captured. Keep moving.")
+                message = "\n".join(msg_lines)
+                
+                url = f"https://api.telegram.org/bot{os.environ['TG_TOKEN']}/sendMessage"
+                payload = {
+                    "chat_id": os.environ['TG_CHAT_ID'],
+                    "text": message,
+                    "parse_mode": "Markdown"
+                }
+                try:
+                    requests.post(url, json=payload)
+                    print("✅ Telegram Nudge Sent")
+                except Exception as e:
+                    print(f"❌ Telegram Fail: {e}")
+        else:
+            print("No actions to nudge or tokens missing.")
       shell: python
 
+    # 4. 壓縮機：Inbox -> Parquet/Archive -> 清空 Inbox
     - name: Run compaction script
       run: python src/actions/compact_inbox.py
 
+    # 5. 存檔：一次提交所有變更 (包含 Inbox 暫存, Status, Projects, Life, Archive)
     - name: Commit and push changes
       uses: stefanzweifel/git-auto-commit-action@v5
       with:
-        commit_message: "🤖 LifeOS: Saved and Organized Entry"
+        commit_message: "🤖 LifeOS: Organized Entry & Nudge Sent"
         file_pattern: "data/*"
