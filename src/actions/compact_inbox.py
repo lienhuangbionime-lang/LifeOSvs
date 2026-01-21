@@ -3,99 +3,17 @@ import glob
 import os
 import json
 import frontmatter
-import shutil
-from collections import Counter
+import sys
+
+# [Path Fix] 確保可以從 src.utils 導入模組
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+from src.utils.analytics import generate_system_state
 
 # 定義路徑
 INBOX_PATH = "data/inbox/"
 ARCHIVE_PARQUET_PATH = "data/archive/journal.parquet"
 ARCHIVE_JSON_PATH = "data/archive/lifeos_db.json"
 SYSTEM_STATE_PATH = "data/archive/system_state.json"
-
-def generate_system_state(df):
-    """
-    計算專案索引、想法交集與系統降速狀態
-    """
-    if df.empty:
-        return {
-            "active_projects": [],
-            "idea_seeds": [],
-            "system_status": {"mode": "BUILD", "reason": "No Data"}
-        }
-
-    # 確保是日期倒序
-    df_sorted = df.sort_values(by='date', ascending=False)
-    recent_df = df_sorted.head(30)
-    
-    # 1. 自動專案索引 (Gardener Logic)
-    all_tags = []
-    for _, row in recent_df.iterrows():
-        # 防禦 NaN (float) 錯誤
-        analysis = row.get('ai_analysis')
-        if not isinstance(analysis, dict):
-            analysis = {}
-            
-        tags = analysis.get('tags') or row.get('tags') or []
-        if isinstance(tags, list):
-            all_tags.extend([str(t).replace('#', '') for t in tags])
-    
-    tag_counts = Counter(all_tags)
-    active_projects = [tag for tag, count in tag_counts.items() if count >= 3]
-
-    # 2. 想法萃取 (Idea Generator)
-    ideas = []
-    for _, row in recent_df.iterrows():
-        analysis = row.get('ai_analysis')
-        if not isinstance(analysis, dict):
-            analysis = {}
-            
-        p_data = analysis.get('project_data', {})
-        if not isinstance(p_data, dict):
-            p_data = {}
-        
-        has_signal = bool(p_data.get('signals'))
-        has_blind_spot = bool(p_data.get('blind_spots'))
-        has_open_node = bool(p_data.get('open_nodes'))
-
-        if has_signal and has_blind_spot and has_open_node:
-            signal_txt = str(p_data.get('signals', ''))[:20]
-            node_txt = str(p_data.get('open_nodes', ''))[:20]
-            ideas.append({
-                "date": row['date'].strftime('%Y-%m-%d') if pd.notnull(row['date']) else "Unknown",
-                "core_concept": f"{signal_txt}... + {node_txt}..."
-            })
-
-    # 3. 生活降速機制 (The Governor)
-    last_2_days = df_sorted.head(2)
-    throttle_mode = "BUILD"
-    reason = "All Systems Nominal"
-    
-    for _, row in last_2_days.iterrows():
-        analysis = row.get('ai_analysis')
-        if not isinstance(analysis, dict):
-            analysis = {}
-            
-        life = analysis.get('life_data', {})
-        if not isinstance(life, dict):
-            life = {}
-        
-        safety = life.get('baseline_safety')
-        energy = life.get('energy_stability')
-
-        if safety == 'Intervene' or energy == 'Low':
-            throttle_mode = "MAINTENANCE"
-            date_str = row['date'].strftime('%Y-%m-%d') if pd.notnull(row['date']) else "Unknown"
-            reason = f"Safety Protocol Triggered on {date_str}"
-            break
-            
-    return {
-        "active_projects": active_projects,
-        "idea_seeds": ideas,
-        "system_status": {
-            "mode": throttle_mode, 
-            "reason": reason
-        }
-    }
 
 def compaction_process():
     # 1. 檢查是否有新檔案
@@ -172,7 +90,7 @@ def compaction_process():
 
         df_combined = df_combined.sort_values(by='date')
 
-        # 生成 System State
+        # 生成 System State (使用共用模組)
         try:
             print("Analyzing System State...")
             system_state = generate_system_state(df_combined)
