@@ -16,9 +16,9 @@ def analyze_dual_track_entry(raw_text):
     """
     專門解析 Dual-Track (Project/Life) 格式的日記
     """
-    model = genai.GenerativeModel('gemini-1.5-flash') # Flash 模型速度快且便宜
+    model = genai.GenerativeModel('gemini-1.5-flash')
 
-    # [修正 1]：縮排修正 (這裡必須縮排，因為它在函式內)
+    # [修正重點]：此變數必須縮排在函式內
     prompt = f"""
     You are the parser for LifeOS. Convert the raw "Dual-Track" journal into structured JSON.
     
@@ -36,7 +36,7 @@ def analyze_dual_track_entry(raw_text):
        - 'action_items': Extract specific, actionable tasks.
          - RULE 1: Must extract items from "Tomorrow's MIT" section.
          - RULE 2: Must extract lines starting with "- [ ]" or "TODO".
-         - RULE 3: Infer implicit high-priority tasks from the narrative (e.g., "I need to fix X tomorrow").
+         - RULE 3: Infer implicit high-priority tasks from the narrative.
          - Format: List of objects {{ "task": "...", "priority": "High/Med/Low", "context": "..." }}.
     
     3. **Life Telemetry**:
@@ -70,20 +70,17 @@ def analyze_dual_track_entry(raw_text):
 
     try:
         response = model.generate_content(prompt)
-        # 清洗 Gemini 回傳的 Markdown 格式
         clean_text = response.text.replace('```json', '').replace('```', '').strip()
         analysis = json.loads(clean_text)
     except Exception as e:
         print(f"AI Parse Failed: {e}")
-        # Fallback 預設值，避免系統崩潰
         analysis = {
             "mood": 5, "focus": 5, "energy": 5, 
             "tags": [], "summary": "AI Parse Error", 
             "sections": {},
-            "action_items": [] # 確保有這個欄位
+            "action_items": [] 
         }
 
-    # 生成向量 (Embedding)
     try:
         embedding_result = genai.embed_content(
             model="models/embedding-001",
@@ -98,10 +95,7 @@ def analyze_dual_track_entry(raw_text):
     return analysis, embedding
 
 def save_to_inbox(raw_text, analysis, embedding):
-    """
-    儲存為 Inbox 原子檔案 (Markdown + JSON Sidecar)
-    """
-    # 嘗試從日記內容抓取日期，若無則用今天
+    # 嘗試抓取日期
     date_str = datetime.datetime.now().strftime("%Y-%m-%d")
     date_match = re.search(r'(\d{4}-\d{2}-\d{2})', raw_text)
     if date_match:
@@ -110,7 +104,7 @@ def save_to_inbox(raw_text, analysis, embedding):
     entry_id = str(uuid.uuid4())[:8]
     filename_base = f"data/inbox/{date_str}_{entry_id}"
     
-    # 1. 建構前端 index.html 需要的完整資料結構
+    # 建構前端資料
     frontend_data = {
         "uuid": entry_id,
         "date": date_str,
@@ -123,18 +117,16 @@ def save_to_inbox(raw_text, analysis, embedding):
             "tags": analysis.get("tags", []),
             "summary": analysis.get("summary", ""),
             "sections": analysis.get("sections", {}),
-            # [修正 2] 重要：必須將 AI 抓到的 action_items 存入 JSON
+            # [修正重點]：確保寫入 Action Items
             "action_items": analysis.get("action_items", []) 
         },
         "embedding": embedding 
     }
 
-    # 2. 寫入 Sidecar JSON
     os.makedirs("data/inbox", exist_ok=True)
     with open(f"{filename_base}.json", "w", encoding="utf-8") as f:
         json.dump(frontend_data, f, ensure_ascii=False, indent=2)
 
-    # 3. 寫入 Markdown
     post = frontmatter.Post(raw_text, **{
         "uuid": entry_id,
         "mood": analysis.get("mood"),
@@ -147,9 +139,8 @@ def save_to_inbox(raw_text, analysis, embedding):
 
 if __name__ == "__main__":
     journal_text = os.getenv("JOURNAL_TEXT")
-    
     if not journal_text:
-        print("⚠️ No text provided via JOURNAL_TEXT env var.")
+        print("⚠️ No text provided.")
         exit(1)
     
     analysis_data, vector_data = analyze_dual_track_entry(journal_text)
