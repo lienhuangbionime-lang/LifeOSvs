@@ -4,13 +4,17 @@ on:
   repository_dispatch:
     types: [new_journal_entry]
   workflow_dispatch:
+    inputs:
+      journal_text:
+        description: 'Journal Content'
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 jobs:
-  # Job 1: 確保資料落地 (最高生存優先級)
-  # 即使後續步驟全炸，這裡已經把 Raw Data 鎖進 Git History 了
+  # Job 1: 資料落地與 AI 解析
   secure_data:
     runs-on: ubuntu-latest
     outputs:
@@ -25,31 +29,28 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
-
+      
       - name: Install dependencies
         run: pip install google-generativeai python-frontmatter
 
-      # 1. 生成 Inbox 檔案 (Gemini Parsing)
-      - name: 🧠 Neural Intake (Gemini)
+      - name: 🧠 Neural Intake
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          JOURNAL_TEXT: ${{ github.event.client_payload.text }}
+          JOURNAL_TEXT: ${{ github.event.client_payload.text || github.event.inputs.journal_text }}
         run: python src/actions/process_inbox.py
 
-      # 2. 立刻 Commit (防禦資料遺失)
       - name: Commit Raw Entry
         id: commit
         run: |
           git config --global user.name "LifeOS Bot"
           git config --global user.email "bot@lifeos.ai"
           git add data/inbox/
-          git commit -m "📝 Log Entry: ${{ github.event.client_payload.metadata.date || 'New Entry' }}" || echo "No changes"
+          git commit -m "📝 Log Entry" || echo "No changes to commit"
           git pull --rebase origin main
-          git push
+          git push origin main
           echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
-  # Job 2: 處理與歸檔 (基於 Job 1 的成果)
-  # 這裡的失敗是「可容忍的」，因為原始資料還在
+  # Job 2: 處理與歸檔
   process_data:
     needs: secure_data
     runs-on: ubuntu-latest
@@ -57,7 +58,7 @@ jobs:
       - name: Checkout content
         uses: actions/checkout@v3
         with:
-          ref: ${{ needs.secure_data.outputs.new_sha }} # 拉取 Job 1 剛 Commit 的版本
+          ref: ${{ needs.secure_data.outputs.new_sha }}
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -67,46 +68,24 @@ jobs:
       - name: Install dependencies
         run: pip install pandas pyarrow python-frontmatter requests google-auth google-api-python-client
 
-      # 3. 專案自動分類 (Dual-Track Splitter)
-      # 必須在 Compaction 之前執行
       - name: 🔀 Run Dual-Track Splitter
-        continue-on-error: true # 分類失敗不應阻止歸檔
+        continue-on-error: true
         run: python src/actions/classify_inbox.py
 
-      # 4. 任務同步 (Sync Tasks) - 失敗不中斷
-      - name: ✅ Sync Tasks (Zapier/Google)
+      - name: ✅ Sync Tasks (Loop Version)
         continue-on-error: true
         env:
           ZAPIER_TASK_WEBHOOK: ${{ secrets.ZAPIER_TASK_WEBHOOK }}
-        # 檢查檔案是否存在再執行，避免報錯
-        run: |
-          if [ -f "src/actions/sync_tasks.py" ]; then
-            python src/actions/sync_tasks.py
-          else
-            echo "sync_tasks.py not found, skipping."
-          fi
+        run: python src/actions/sync_tasks.py
 
-      # 5. 報告生成 (Generate Report)
-      - name: 📊 Generate Project Status
-        continue-on-error: true
-        run: |
-          if [ -f "src/actions/generate_report.py" ]; then
-            python src/actions/generate_report.py
-          else
-            echo "generate_report.py not found, skipping."
-          fi
-
-      # 6. 壓縮歸檔 (Compaction & Cleanup)
-      # 將 Inbox 轉為 Parquet/JSON 並清空 Inbox
       - name: 🗜️ Compaction & Cleanup
         run: python src/actions/compact_inbox.py
 
-      # 7. 提交系統狀態 (System State)
       - name: Commit System State
         run: |
           git config --global user.name "LifeOS Bot"
           git config --global user.email "bot@lifeos.ai"
           git add data/
-          git commit -m "⚙️ System Processed & Compacted" || echo "No changes"
-          git pull --rebase origin main
-          git push
+          git commit -m "⚙️ Processed" || echo "No changes"
+          # [核心修復] 解決 Detached HEAD 問題
+          git push origin HEAD:main
