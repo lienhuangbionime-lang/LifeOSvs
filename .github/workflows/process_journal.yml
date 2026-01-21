@@ -18,47 +18,41 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.10'
+        python-version: '3.9'
 
     - name: Install dependencies
       run: |
-        pip install --upgrade pip
-        pip install pandas pyarrow python-frontmatter google-generativeai google-api-python-client google-auth-httplib2 google-auth-oauthlib
+        python -m pip install --upgrade pip
+        pip install pandas pyarrow python-frontmatter requests
 
-    # 1. 大腦解析 (生成 Inbox 原子檔案)
-    - name: Run Neural Brain (Process Inbox)
+    # 1. 思考與寫入 (Inbox)
+    - name: Run Neural Classifier (Gemini)
       env:
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         JOURNAL_TEXT: ${{ github.event.client_payload.text }}
       run: python src/actions/process_inbox.py
 
-    # 2. 自動分流 (歸檔到 Project/Life 資料夾)
-    - name: Run Splitter (Classify)
+    # 2. 執行閉環 (Tasks) - NEW
+    - name: Sync Tasks to Google
+      env:
+        ZAPIER_TASK_WEBHOOK: ${{ secrets.ZAPIER_TASK_WEBHOOK }}
+      run: python src/actions/sync_tasks.py
+
+    # 3. 專案分流 (Classification)
+    - name: Run Dual-Track Splitter
       run: python src/actions/classify_inbox.py
 
-    # 3. [NEW] 產生 Google Tasks 待辦事項 (Nudge)
-    - name: Sync to Google Tasks
-      env:
-        GOOGLE_TASKS_CREDS: ${{ secrets.GOOGLE_TASKS_CREDS }} # 需在 GitHub Secrets 設定
-        TASK_LIST_ID: ${{ secrets.TASK_LIST_ID }} # 你的 Task List ID
-      run: python src/actions/push_tasks.py
-
-    # 4. [NEW] 生成專案戰情報告 (Project Report)
-    - name: Generate Project Report
-      env:
-        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      run: python src/actions/generate_report.py
-
-    # 5. 壓縮與清理 (維護資料庫)
-    - name: Run Compaction (Database Maintenance)
+    # 4. 壓縮與歸檔 (Compaction)
+    - name: Run compaction script
       run: python src/actions/compact_inbox.py
 
+    # 5. 生成戰情報告 (Reporting) - NEW
+    - name: Generate Project Report
+      run: python src/actions/generate_report.py
+
     # 6. 一次性提交所有變更
-    - name: Commit and Push
-      run: |
-        git config --global user.name "LifeOS Bot"
-        git config --global user.email "bot@lifeos.ai"
-        git add data/
-        git commit -m "🧠 Neural Process: Analysis, Tasks & Reporting Complete" || exit 0
-        git pull --rebase origin main
-        git push
+    - name: Commit and push changes
+      uses: stefanzweifel/git-auto-commit-action@v5
+      with:
+        commit_message: "🤖 LifeOS: Processed, Synced & Reported"
+        file_pattern: "data/*"
