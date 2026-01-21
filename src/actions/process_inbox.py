@@ -2,25 +2,23 @@ import os
 import json
 import uuid
 import datetime
-import google.generativeai as genai
+from google import genai
 import frontmatter
 import re
 
 API_KEY = os.getenv("GEMINI_API_KEY")
 if not API_KEY:
     raise ValueError("FATAL: GEMINI_API_KEY is not set.")
-genai.configure(api_key=API_KEY)
+
+# [MIGRATION] 初始化新版 Client
+client = genai.Client(api_key=API_KEY)
 
 def regex_fallback_extract(raw_text):
     """
     如果 AI 失敗，使用強化的正則表達式強制提取 'Tomorrow's MIT' 區塊
     """
     tasks = []
-    # [核心修正]：
-    # 1. (?:##|###) -> 匹配二級或三級標題
-    # 2. \s* -> 允許空格
-    # 3. (?:\d+\.?\s*)? -> [新增] 允許 "1. ", "4. " 這樣的編號
-    # 4. Tomorrow.s -> 允許 ' 或 ’
+    # (?:##|###) -> 匹配二級或三級標題
     mit_pattern = r"(?:##|###)\s*(?:\d+\.?\s*)?Tomorrow.s\s*MIT.*?(?:\n|$)(.*?)(?=\n#|\Z)"
     
     match = re.search(mit_pattern, raw_text, re.DOTALL | re.IGNORECASE)
@@ -46,8 +44,6 @@ def regex_fallback_extract(raw_text):
     return tasks
 
 def analyze_dual_track_entry(raw_text):
-    model = genai.GenerativeModel('gemini-1.5-flash')
-    
     prompt = f"""
     You are the parser for LifeOS. Convert the raw "Dual-Track" journal into structured JSON.
     
@@ -55,37 +51,24 @@ def analyze_dual_track_entry(raw_text):
     {raw_text}
     
     ### Extraction Logic:
-    1. **Project Intelligence**:
-       - 'name_candidates': Extract potential project names.
-       - 'signals': Content from 'Signals Detected'.
-       - 'blind_spots': Content from 'Blind Spot Question'.
-       - 'open_nodes': Content from 'Open Nodes'.
-    
-    2. **Action Extraction Protocol (CRITICAL)**:
-       - 'action_items': Extract specific, actionable tasks.
-         - RULE 1: Extract from "Tomorrow's MIT" (allow numbering e.g., "4. Tomorrow's MIT").
-         - RULE 2: Extract lines starting with "- [ ]" or "TODO".
-         - Format: List of objects {{ "task": "...", "priority": "High/Med/Low", "context": "Project/Life" }}.
-    
-    3. **Life Telemetry**:
-       - 'energy_stability', 'relationship_presence', 'baseline_safety'.
+    1. **Project Intelligence**: 'name_candidates', 'signals', 'blind_spots', 'open_nodes'.
+    2. **Action Extraction**: 'action_items' from "Tomorrow's MIT".
+    3. **Life Telemetry**: 'energy_stability', 'relationship_presence', 'baseline_safety'.
     
     ### Output Format (Strict JSON):
     {{
-      "mood": 5.0,
-      "focus": 5.0,
-      "tags": ["tag1"],
-      "action_items": [
-         {{ "task": "Task Name", "priority": "High", "context": "Context" }}
-      ],
-      "project_data": {{ ... }},
-      "life_data": {{ ... }},
-      "summary": "..."
+      "mood": 5.0, "focus": 5.0, "tags": [], "action_items": [],
+      "project_data": {{}}, "life_data": {{}}, "summary": "..."
     }}
     """
 
     try:
-        response = model.generate_content(prompt)
+        # [MIGRATION] 新版生成調用 (google-genai)
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt
+        )
+        # 移除 markdown code block 標記
         clean_text = response.text.replace('```json', '').replace('```', '').strip()
         analysis = json.loads(clean_text)
     except Exception as e:
@@ -97,21 +80,21 @@ def analyze_dual_track_entry(raw_text):
         print("⚠️ AI found no actions. Engaging Regex Fallback Protocol...")
         fallback_actions = regex_fallback_extract(raw_text)
         if fallback_actions:
-            print(f"✅ Regex Fallback recovered {len(fallback_actions)} tasks.")
             analysis['action_items'] = fallback_actions
-        else:
-            print("💡 Regex Fallback also found no tasks.")
-            analysis['action_items'] = []
 
     # Embedding
     try:
-        embedding_result = genai.embed_content(
-            model="models/embedding-001",
-            content=raw_text,
-            task_type="RETRIEVAL_DOCUMENT"
+        # [MIGRATION] 新版 Embedding 調用 (google-genai)
+        # 注意：LifeOS 目前僅使用單一文檔 embedding
+        embedding_resp = client.models.embed_content(
+            model="text-embedding-004",
+            contents=raw_text,
+            config={'task_type': 'RETRIEVAL_DOCUMENT'}
         )
-        embedding = embedding_result['embedding']
-    except:
+        # 新版 SDK 回傳結構：embedding_resp.embeddings[0].values
+        embedding = embedding_resp.embeddings[0].values
+    except Exception as e:
+        print(f"⚠️ Embedding Failed: {e}")
         embedding = []
     
     return analysis, embedding
